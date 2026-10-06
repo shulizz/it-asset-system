@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232563eb'/%3E%3Crect x='14' y='18' width='36' height='24' rx='2' fill='white'/%3E%3Cpath d='M22 48h20M32 42v6' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
+<title>IT 固定资产管理系统</title>
+<style>
+/* ===== Reset & Base ===== */
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif;background:#f0f2f5;color:#1e293b;font-size:14px;overflow:hidden;height:100vh}
+a{text-decoration:none;color:inherit}
+button{cursor:pointer;border:none;font-family:inherit;font-size:inherit}
+input,select{font-family:inherit;font-size:inherit;outline:none}
+
+/* ===== Login ===== */
+.login-wrap{display:flex;align-items:center;justify-content:center;height:100vh;background:linear-gradient(135deg,#1e3a5f 0%,#0f1f3d 100%)}
+.login-box{background:#fff;border-radius:12px;padding:40px;width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.login-logo{text-align:center;margin-bottom:28px}
+.login-logo .icon{width:56px;height:56px;background:#2563eb;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px}
+.login-logo h1{font-size:20px;font-weight:600;color:#1e293b}
+.login-logo p{font-size:13px;color:#94a3b8;margin-top:4px}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:13px;color:#64748b;margin-bottom:6px}
+.form-group input{width:100%;height:40px;border:1px solid #e2e8f0;border-radius:8px;padding:0 12px;transition:border .2s}
+.form-group input:focus{border-color:#2563eb}
+.btn-login{width:100%;height:42px;background:#2563eb;color:#fff;border-radius:8px;font-size:15px;font-weight:500;transition:background .2s}
+.btn-login:hover{background:#1d4ed8}
+.login-roles{margin-top:20px;padding-top:16px;border-top:1px solid #f1f5f9;font-size:12px;color:#94a3b8;text-align:center}
+
+/* ===== App Shell ===== */
+.app{display:flex;height:100vh}
+.sidebar{width:220px;background:#1e293b;color:#cbd5e1;display:flex;flex-direction:column;flex-shrink:0}
+.sidebar-logo{padding:18px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #334155}
+.sidebar-logo .logo-box{width:32px;height:32px;background:#2563eb;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sidebar-logo span{font-size:15px;font-weight:600;color:#fff;white-space:nowrap}
+.nav{flex:1;overflow-y:auto;padding:12px 0}
+.nav-group{margin-bottom:4px}
+.nav-group-title{padding:8px 20px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:14px;color:#cbd5e1;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover{background:#334155;color:#fff}
+.nav-item.active{background:#2563eb;color:#fff;border-left-color:#60a5fa}
+.nav-item svg{width:18px;height:18px;flex-shrink:0}
+.nav-badge{margin-left:auto;background:#ef4444;color:#fff;font-size:11px;padding:1px 6px;border-radius:10px;line-height:1.4}
+.sidebar-footer{padding:14px 20px;border-top:1px solid #334155;font-size:12px;color:#64748b}
+
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{height:56px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;padding:0 24px;gap:16px;flex-shrink:0}
+.topbar .breadcrumb{font-size:15px;font-weight:600;color:#1e293b}
+.topbar .search{margin-left:24px;flex:1;max-width:360px}
+.topbar .search input{width:100%;height:34px;border:1px solid #e2e8f0;border-radius:17px;padding:0 14px;background:#f8fafc}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:16px}
+.topbar-right .icon-btn{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#64748b;position:relative}
+.topbar-right .icon-btn:hover{background:#f1f5f9}
+.topbar-right .dot{position:absolute;top:6px;right:6px;width:8px;height:8px;background:#ef4444;border-radius:50%;border:2px solid #fff}
+.user-chip{display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 8px;border-radius:8px}
+.user-chip:hover{background:#f1f5f9}
+.avatar{width:30px;height:30px;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500}
+.user-chip .name{font-size:13px;color:#1e293b}
+.user-chip .role{font-size:11px;color:#94a3b8}
+
+.content{flex:1;overflow-y:auto;padding:24px}
+
+/* ===== Cards & Stats ===== */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.stat-card{background:#fff;border-radius:10px;padding:18px;display:flex;align-items:center;gap:14px;border:1px solid #e2e8f0}
+.stat-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.stat-icon svg{width:22px;height:22px}
+.stat-info .num{font-size:24px;font-weight:700;color:#1e293b;line-height:1.2}
+.stat-info .label{font-size:12px;color:#94a3b8;margin-top:2px}
+
+.panel{background:#fff;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:20px}
+.panel-header{padding:16px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:between}
+.panel-header h3{font-size:15px;font-weight:600}
+.panel-header .actions{margin-left:auto;display:flex;gap:8px}
+.panel-body{padding:20px}
+
+/* ===== Buttons ===== */
+.btn{padding:7px 14px;border-radius:6px;font-size:13px;font-weight:500;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#2563eb;color:#fff}
+.btn-primary:hover{background:#1d4ed8}
+.btn-outline{background:#fff;border:1px solid #e2e8f0;color:#475569}
+.btn-outline:hover{border-color:#2563eb;color:#2563eb}
+.btn-danger{background:#ef4444;color:#fff}
+.btn-sm{padding:4px 10px;font-size:12px}
+
+/* ===== Tables ===== */
+table{width:100%;border-collapse:collapse}
+th{background:#f8fafc;text-align:left;padding:10px 12px;font-size:12px;color:#64748b;font-weight:500;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#334155}
+tr:hover td{background:#f8fafc}
+
+/* ===== Badges ===== */
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:500}
+.badge-green{background:#dcfce7;color:#16a34a}
+.badge-blue{background:#dbeafe;color:#2563eb}
+.badge-amber{background:#fef3c7;color:#d97706}
+.badge-red{background:#fee2e2;color:#dc2626}
+.badge-gray{background:#f1f5f9;color:#64748b}
+.badge-purple{background:#ede9fe;color:#7c3aed}
+
+/* ===== Dashboard layout ===== */
+.dash-grid{display:grid;grid-template-columns:2fr 1fr;gap:20px}
+.todo-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #f1f5f9}
+.todo-item:last-child{border-bottom:none}
+.todo-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.todo-content{flex:1}
+.todo-content .title{font-size:13px;color:#1e293b;font-weight:500}
+.todo-content .meta{font-size:12px;color:#94a3b8;margin-top:2px}
+.memo-area{width:100%;min-height:120px;border:1px solid #e2e8f0;border-radius:8px;padding:12px;resize:vertical;font-family:inherit;font-size:13px;color:#334155}
+.memo-area:focus{border-color:#2563eb}
+
+/* ===== Toolbar ===== */
+.toolbar{display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap}
+.toolbar input,.toolbar select{height:34px;border:1px solid #e2e8f0;border-radius:6px;padding:0 10px;background:#fff}
+.toolbar input{width:220px}
+.filter-chip{padding:5px 12px;border-radius:15px;font-size:12px;cursor:pointer;border:1px solid #e2e8f0;background:#fff;color:#64748b}
+.filter-chip.active{background:#2563eb;color:#fff;border-color:#2563eb}
+
+/* ===== Views (hidden by default) ===== */
+.view{display:none}
+.view.active{display:block}
+
+/* ===== Detail/Form ===== */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.form-item label{display:block;font-size:13px;color:#64748b;margin-bottom:4px}
+.form-item input,.form-item select,.form-item textarea{width:100%;height:36px;border:1px solid #e2e8f0;border-radius:6px;padding:0 10px;background:#fff}
+.form-item textarea{height:auto;padding:8px 10px;resize:vertical}
+
+/* ===== Timeline ===== */
+.timeline{padding-left:20px;border-left:2px solid #e2e8f0}
+.timeline-item{position:relative;padding-bottom:20px}
+.timeline-item::before{content:'';position:absolute;left:-26px;top:4px;width:10px;height:10px;border-radius:50%;background:#2563eb;border:2px solid #fff;box-shadow:0 0 0 2px #2563eb}
+.timeline-item .time{font-size:12px;color:#94a3b8}
+.timeline-item .event{font-size:13px;color:#1e293b;margin-top:2px}
+
+/* ===== Toast ===== */
+.toast{position:fixed;top:20px;right:20px;background:#1e293b;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:999;display:none}
+</style>
+</head>
+<body>
+
+<!-- ===== 登录页 ===== -->
+<div class="login-wrap view active" id="view-login">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      </div>
+      <h1>IT 固定资产管理系统</h1>
+      <p>请登录以继续</p>
+    </div>
+    <div class="form-group">
+      <label>账号</label>
+      <input type="text" value="admin" placeholder="请输入账号">
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" value="123456" placeholder="请输入密码">
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;font-size:13px;color:#64748b">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" checked style="width:14px;height:14px;cursor:pointer">
+        记住账号密码
+      </label>
+      <a href="#" onclick="toast('请联系管理员重置密码');return false" style="color:#2563eb">忘记密码？</a>
+    </div>
+    <button class="btn-login" onclick="login()">登 录</button>
+    <div class="login-roles">演示账号：admin / asset / manager / leader</div>
+  </div>
+</div>
+
+<!-- ===== App 主界面 ===== -->
+<div class="app" id="app" style="display:none">
+  <!-- 侧边栏 -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-box">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      </div>
+      <span>IT 资产管理</span>
+    </div>
+    <nav class="nav">
+      <div class="nav-group">
+        <div class="nav-item active" data-route="dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          工作台
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">资产档案</div>
+        <div class="nav-item" data-route="assets-it">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          IT 设备
+        </div>
+        <div class="nav-item" data-route="assets-phone">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
+          手机设备
+        </div>
+        <div class="nav-item" data-route="assets-medical">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+          医疗设备
+        </div>
+        <div class="nav-item" data-route="phone">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.34 1.79.66 2.64a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.44-1.44a2 2 0 0 1 2.11-.45c.85.32 1.74.54 2.64.66A2 2 0 0 1 22 16.92z"/></svg>
+          电话号码
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">流转与处置</div>
+        <div class="nav-item" data-route="transfer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3l4 4-4 4"/><path d="M21 7H9"/><path d="M7 21l-4-4 4-4"/><path d="M3 17h12"/></svg>
+          设备流转
+        </div>
+        <div class="nav-item" data-route="scrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          报废管理
+          <span class="nav-badge">3</span>
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">数据与管理</div>
+        <div class="nav-item" data-route="reports">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
+          报表统计
+        </div>
+        <div class="nav-item" data-route="users">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          权限管理
+        </div>
+        <div class="nav-item" data-route="logs">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          操作日志
+        </div>
+      </div>
+    </nav>
+    <div class="sidebar-footer">v1.0 演示版</div>
+  </aside>
+
+  <!-- 主区域 -->
+  <div class="main">
+    <header class="topbar">
+      <div class="breadcrumb" id="crumb">工作台</div>
+      <div class="search"><input type="text" placeholder="搜索设备编号、使用人、部门..."></div>
+      <div class="topbar-right">
+        <div class="icon-btn" title="通知">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="dot"></span>
+        </div>
+        <div class="user-chip">
+          <div class="avatar">管</div>
+          <div>
+            <div class="name">管理员</div>
+            <div class="role">超级管理员</div>
+          </div>
+        </div>
+      </div>
+    </header>
+    <div class="content" id="content">
+
+      <!-- ===== 工作台 ===== -->
+      <div class="view active" id="view-dashboard">
+        <div class="stat-row">
+          <div class="stat-card">
+            <div class="stat-icon" style="background:#dbeafe">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            </div>
+            <div class="stat-info"><div class="num">328</div><div class="label">设备总数</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:#dcfce7">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+            </div>
+            <div class="stat-info"><div class="num">296</div><div class="label">在用设备</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:#fef3c7">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <div class="stat-info"><div class="num">18</div><div class="label">闲置设备</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:#fee2e2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+            </div>
+            <div class="stat-info"><div class="num">3</div><div class="label">待审批报废</div></div>
+          </div>
+        </div>
+
+        <div class="dash-grid">
+          <div>
+            <div class="panel">
+              <div class="panel-header">
+                <h3>今日待办</h3>
+                <div class="actions"><button class="btn btn-outline btn-sm">全部</button></div>
+              </div>
+              <div class="panel-body">
+                <div class="todo-item">
+                  <div class="todo-dot" style="background:#ef4444"></div>
+                  <div class="todo-content">
+                    <div class="title">报废审批：笔记本 LN-2023-045（研发部·张工）</div>
+                    <div class="meta">提交于今天 09:15 · 等待公司领导审批</div>
+                  </div>
+                  <button class="btn btn-primary btn-sm" onclick="toast('已跳转审批')">去审批</button>
+                </div>
+                <div class="todo-item">
+                  <div class="todo-dot" style="background:#dc2626"></div>
+                  <div class="todo-content">
+                    <div class="title">删除审批：电话卡 136****1122（已注销，申请删除记录）</div>
+                    <div class="meta">提交于今天 10:20 · 等待资产管理员/超级管理员审批</div>
+                  </div>
+                  <button class="btn btn-primary btn-sm" onclick="toast('已跳转删除审批')">去审批</button>
+                </div>
+                <div class="todo-item">
+                  <div class="todo-dot" style="background:#f59e0b"></div>
+                  <div class="todo-content">
+                    <div class="title">离职回收：财务部 李姐 已提交离职申请</div>
+                    <div class="meta">需回收：笔记本、显示器、座机号 028-8888-1023</div>
+                  </div>
+                  <button class="btn btn-outline btn-sm" onclick="toast('已跳转回收')">处理</button>
+                </div>
+                <div class="todo-item">
+                  <div class="todo-dot" style="background:#3b82f6"></div>
+                  <div class="todo-content">
+                    <div class="title">部门调拨：2台显示器从市场部调至研发部</div>
+                    <div class="meta">发起人：市场部王经理 · 等待确认</div>
+                  </div>
+                  <button class="btn btn-outline btn-sm" onclick="toast('已跳转调拨')">确认</button>
+                </div>
+                <div class="todo-item">
+                  <div class="todo-dot" style="background:#8b5cf6"></div>
+                  <div class="todo-content">
+                    <div class="title">新员工入职领用：研发部 新人 3 名</div>
+                    <div class="meta">需准备：笔记本×3、显示器×3、电话卡×3</div>
+                  </div>
+                  <button class="btn btn-outline btn-sm" onclick="toast('已跳转领用')">准备</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header"><h3>各模块概览</h3></div>
+              <div class="panel-body">
+                <table>
+                  <colgroup><col style="width:25%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"></colgroup>
+                  <thead><tr><th>模块</th><th>总数</th><th>在用</th><th>闲置</th><th>待处理</th><th>本月新增</th></tr></thead>
+                  <tbody>
+                    <tr><td>IT 设备</td><td>245</td><td>228</td><td>12</td><td>3</td><td>5</td></tr>
+                    <tr><td>手机设备</td><td>42</td><td>38</td><td>2</td><td>1</td><td>1</td></tr>
+                    <tr><td>医疗设备</td><td>21</td><td>20</td><td>1</td><td>0</td><td>0</td></tr>
+                    <tr><td>电话号码</td><td>68</td><td>62</td><td>4</td><td>2</td><td>2</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="panel">
+              <div class="panel-header"><h3>快速备忘</h3></div>
+              <div class="panel-body">
+                <textarea class="memo-area" placeholder="记点什么...">
+- 10月15日前完成 Q4 设备盘点
+- 联系华为确认新批次服务器到货时间
+- 医疗设备年度校准提醒：CT-2024-002 11月到期</textarea>
+                <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="toast('备忘已保存')">保存备忘</button>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><h3>最近动态</h3></div>
+              <div class="panel-body">
+                <div class="timeline">
+                  <div class="timeline-item">
+                    <div class="time">10:32</div>
+                    <div class="event">张工 领用了 笔记本 LN-2024-089</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="time">09:48</div>
+                    <div class="event">提交报废申请：打印机 PR-2021-012</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="time">昨天 17:20</div>
+                    <div class="event">财务部 李姐 归还了 显示器 MN-2022-056</div>
+                  </div>
+                  <div class="timeline-item">
+                    <div class="time">昨天 15:05</div>
+                    <div class="event">电话卡 138****6677 由 行政部 调至 市场部</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 视图占位 -->
+      <div class="view" id="view-assets-it">
+        <div class="toolbar">
+          <input type="text" placeholder="搜索设备编号 / 型号 / 使用人...">
+          <select><option>全部状态</option><option>在用</option><option>闲置</option><option>维修中</option><option>已报废</option></select>
+          <select><option>全部部门</option><option>研发部</option><option>市场部</option><option>财务部</option><option>行政部</option></select>
+          <button class="btn btn-primary" onclick="toast('打开新增设备表单')">+ 新增设备</button>
+          <button class="btn btn-outline" onclick="toast('导入 Excel')">导入 Excel</button>
+          <button class="btn btn-outline" onclick="toast('导出列表')">导出</button>
+        </div>
+        <div class="panel">
+          <div class="panel-body" style="padding:0">
+            <table>
+              <colgroup><col style="width:13%"><col style="width:18%"><col style="width:12%"><col style="width:11%"><col style="width:11%"><col style="width:14%"><col style="width:10%"><col style="width:11%"></colgroup>
+              <thead><tr><th>资产编号</th><th>设备名称</th><th>使用人</th><th>部门</th><th>状态</th><th>采购日期</th><th>保修到期</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>IT-2023-001</td><td>笔记本电脑 ThinkPad X1 Carbon</td><td>张工</td><td>研发部</td><td><span class="badge badge-green">在用</span></td><td>2023-03-15</td><td>2026-03-14</td><td><a href="#" onclick="toast('查看详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>IT-2023-002</td><td>笔记本电脑 ThinkPad X1 Carbon</td><td>—</td><td>—</td><td><span class="badge badge-amber">闲置</span></td><td>2023-03-15</td><td>2026-03-14</td><td><a href="#" onclick="toast('查看详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>IT-2022-045</td><td>显示器 Dell U2723QE 27寸</td><td>李姐</td><td>财务部</td><td><span class="badge badge-green">在用</span></td><td>2022-06-20</td><td>2025-06-19</td><td><a href="#" onclick="toast('查看详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>IT-2021-012</td><td>激光打印机 HP M404dn</td><td>行政部</td><td>行政部</td><td><span class="badge badge-red">待报废</span></td><td>2021-01-10</td><td>2024-01-09</td><td><a href="#" onclick="toast('查看详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>IT-2024-089</td><td>台式机 定制 i5/16G/512G</td><td>王经理</td><td>市场部</td><td><span class="badge badge-green">在用</span></td><td>2024-08-01</td><td>2027-07-31</td><td><a href="#" onclick="toast('查看详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>IT-2020-033</td><td>交换机 H3C S5130S-28S</td><td>机房</td><td>IT部</td><td><span class="badge badge-green">在用</span></td><td>2020-05-18</td><td>2023-05-17</td><td><a href="#" onclick="toast('查看详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>IT-2022-078</td><td> MacBook Pro 14 M3</td><td>—</td><td>—</td><td><span class="badge badge-gray">已归档</span></td><td>2022-11-30</td><td>2025-11-29</td><td><a href="#" onclick="toast('查看详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="view" id="view-assets-phone">
+        <div class="toolbar">
+          <input type="text" placeholder="搜索设备编号 / IMEI / 使用人...">
+          <select><option>全部状态</option><option>在用</option><option>闲置</option><option>已报废</option></select>
+          <button class="btn btn-primary" onclick="toast('打开新增手机表单')">+ 新增手机</button>
+          <button class="btn btn-outline" onclick="toast('导入 Excel')">导入 Excel</button>
+        </div>
+        <div class="panel">
+          <div class="panel-body" style="padding:0">
+            <table>
+              <colgroup><col style="width:11%"><col style="width:18%"><col style="width:16%"><col style="width:13%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:12%"></colgroup>
+              <thead><tr><th>资产编号</th><th>品牌型号</th><th>IMEI</th><th>绑定号码</th><th>使用人</th><th>部门</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>PH-2024-001</td><td>iPhone 15 Pro 256G</td><td>359201102456781</td><td>138****6677</td><td>王经理</td><td>市场部</td><td><span class="badge badge-green">在用</span></td><td><a href="#" onclick="toast('详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>PH-2024-002</td><td>Huawei Mate 60 Pro 512G</td><td>867123050987654</td><td>139****8899</td><td>张工</td><td>研发部</td><td><span class="badge badge-green">在用</span></td><td><a href="#" onclick="toast('详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>PH-2023-015</td><td>iPhone 14 128G</td><td>358801041234567</td><td>136****1122</td><td>—</td><td>—</td><td><span class="badge badge-amber">闲置</span></td><td><a href="#" onclick="toast('详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>PH-2023-018</td><td>Huawei P60 256G</td><td>865512083456789</td><td>135****4455</td><td>李姐</td><td>财务部</td><td><span class="badge badge-green">在用</span></td><td><a href="#" onclick="toast('详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="view" id="view-assets-medical">
+        <div class="toolbar">
+          <input type="text" placeholder="搜索设备编号 / 名称 / 科室...">
+          <select><option>全部状态</option><option>在用</option><option>闲置</option><option>送检中</option><option>已报废</option></select>
+          <button class="btn btn-primary" onclick="toast('打开新增医疗设备表单')">+ 新增设备</button>
+          <button class="btn btn-outline" onclick="toast('导入 Excel')">导入 Excel</button>
+        </div>
+        <div class="panel">
+          <div class="panel-body" style="padding:0">
+            <table>
+              <colgroup><col style="width:11%"><col style="width:16%"><col style="width:12%"><col style="width:9%"><col style="width:10%"><col style="width:11%"><col style="width:10%"><col style="width:9%"><col style="width:12%"></colgroup>
+              <thead><tr><th>资产编号</th><th>设备名称</th><th>型号</th><th>科室</th><th>保管人</th><th>校准到期日</th><th>状态</th><th>保修</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>MED-2024-001</td><td>心电监护仪</td><td>Philips IntelliVue MX450</td><td>急诊科</td><td>王护士</td><td>2026-03-15</td><td><span class="badge badge-green">在用</span></td><td>2026-08</td><td><a href="#" onclick="toast('详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>MED-2023-005</td><td>超声诊断仪</td><td>GE Voluson E10</td><td>超声科</td><td>赵医生</td><td>2026-01-20</td><td><span class="badge badge-green">在用</span></td><td>2027-05</td><td><a href="#" onclick="toast('详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>MED-2022-008</td><td>血液分析仪</td><td>Sysmex XN-1000</td><td>检验科</td><td>—</td><td>2025-11-10</td><td><span class="badge badge-amber">校准即将到期</span></td><td>已过保</td><td><a href="#" onclick="toast('详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>MED-2024-002</td><td>心电图机</td><td>GE MAC 2000</td><td>心内科</td><td>孙医生</td><td>2027-06-01</td><td><span class="badge badge-green">在用</span></td><td>2027-06</td><td><a href="#" onclick="toast('详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="view" id="view-transfer">
+        <div class="toolbar">
+          <div class="filter-chip active" onclick="this.parentElement.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">全部</div>
+          <div class="filter-chip" onclick="this.parentElement.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">领用</div>
+          <div class="filter-chip" onclick="this.parentElement.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">归还</div>
+          <div class="filter-chip" onclick="this.parentElement.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">部门调拨</div>
+          <div class="filter-chip" onclick="this.parentElement.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">离职回收</div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn btn-primary" onclick="toast('打开领用工单')">+ 登记领用</button>
+            <button class="btn btn-outline" onclick="toast('打开归还登记')">登记归还</button>
+            <button class="btn btn-outline" onclick="toast('打开调拨单')">部门调拨</button>
+            <button class="btn btn-outline" onclick="toast('打开离职回收')">离职回收</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-body" style="padding:0">
+            <table>
+              <colgroup><col style="width:11%"><col style="width:9%"><col style="width:14%"><col style="width:13%"><col style="width:13%"><col style="width:11%"><col style="width:12%"><col style="width:17%"></colgroup>
+              <thead><tr><th>工单编号</th><th>类型</th><th>设备</th><th>经手人</th><th>对方</th><th>部门</th><th>日期</th><th>备注</th></tr></thead>
+              <tbody>
+                <tr><td>TR-20261004-01</td><td><span class="badge badge-blue">领用</span></td><td>笔记本 LN-2024-089</td><td>管理员</td><td>张工</td><td>研发部</td><td>2026-10-04</td><td>新员工入职</td></tr>
+                <tr><td>TR-20261003-05</td><td><span class="badge badge-purple">调拨</span></td><td>显示器 MN-2022-056 ×2</td><td>管理员</td><td>市场部→研发部</td><td>—</td><td>2026-10-03</td><td>部门调整</td></tr>
+                <tr><td>TR-20261003-03</td><td><span class="badge badge-amber">归还</span></td><td>显示器 MN-2022-056</td><td>管理员</td><td>李姐</td><td>财务部</td><td>2026-10-03</td><td>设备升级</td></tr>
+                <tr><td>TR-20261002-02</td><td><span class="badge badge-red">离职回收</span></td><td>笔记本 LN-2023-045、座机 028-8888-1023</td><td>管理员</td><td>李姐（离职）</td><td>财务部</td><td>2026-10-02</td><td>待确认回收</td></tr>
+                <tr><td>TR-20260930-08</td><td><span class="badge badge-blue">领用</span></td><td>电话卡 138****6677</td><td>管理员</td><td>王经理</td><td>市场部</td><td>2026-09-30</td><td>—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="view" id="view-scrap">
+        <div class="toolbar">
+          <div class="filter-chip active">全部</div>
+          <div class="filter-chip">待鉴定</div>
+          <div class="filter-chip">待审批</div>
+          <div class="filter-chip">已批准</div>
+          <div class="filter-chip">已处置</div>
+          <div class="filter-chip">已归档</div>
+          <div style="margin-left:auto"><button class="btn btn-primary" onclick="toast('打开报废申请单')">+ 发起报废申请</button></div>
+        </div>
+        <div class="panel">
+          <div class="panel-body" style="padding:0">
+            <table>
+              <colgroup><col style="width:11%"><col style="width:15%"><col style="width:10%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:11%"><col style="width:11%"><col style="width:10%"></colgroup>
+              <thead><tr><th>申请编号</th><th>设备</th><th>申请人</th><th>部门</th><th>报废原因</th><th>当前阶段</th><th>提交日期</th><th>鉴定人</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>SC-20261004-01</td><td>笔记本 LN-2023-045</td><td>张工</td><td>研发部</td><td>主板损坏，维修费用过高</td><td><span class="badge badge-blue">待审批</span></td><td>2026-10-04</td><td>已完成</td><td><a href="#" onclick="toast('查看详情');return false" style="color:#2563eb">详情</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>SC-20261003-02</td><td>打印机 PR-2021-012</td><td>管理员</td><td>行政部</td><td>已使用5年，频繁故障</td><td><span class="badge badge-amber">待鉴定</span></td><td>2026-10-03</td><td>—</td><td><a href="#" onclick="toast('鉴定');return false" style="color:#2563eb">鉴定</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>SC-20260928-03</td><td>显示器 MN-2020-008</td><td>管理员</td><td>IT部</td><td>屏幕出现亮线，无法维修</td><td><span class="badge badge-green">已批准</span></td><td>2026-09-28</td><td>已完成</td><td><a href="#" onclick="toast('处置登记');return false" style="color:#2563eb">处置</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>SC-20260920-04</td><td>台式机 DT-2019-056</td><td>管理员</td><td>财务部</td><td>性能不足，无法满足办公</td><td><span class="badge badge-gray">已归档</span></td><td>2026-09-20</td><td>已完成</td><td><a href="#" onclick="toast('查看归档');return false" style="color:#2563eb">查看</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="view" id="view-phone">
+        <div class="toolbar">
+          <input type="text" placeholder="搜索号码 / 使用人 / 部门...">
+          <select><option>全部状态</option><option>在用</option><option>闲置</option><option>注销</option><option>不再使用</option></select>
+          <select><option>全部运营商</option><option>中国移动</option><option>中国联通</option><option>中国电信</option></select>
+          <select><option>全部类型</option><option>主卡</option><option>副卡</option><option>座机</option></select>
+          <button class="btn btn-primary" onclick="toast('打开新增号码表单')">+ 新增号码</button>
+        </div>
+        <div class="panel">
+          <div class="panel-body" style="padding:0">
+            <table>
+              <colgroup><col style="width:13%"><col style="width:11%"><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:12%"><col style="width:10%"><col style="width:13%"><col style="width:13%"></colgroup>
+              <thead><tr><th>电话号码</th><th>运营商</th><th>类型</th><th>套餐</th><th>所属部门</th><th>使用人</th><th>状态</th><th>绑定设备</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>138****6677</td><td>中国移动</td><td><span class="badge badge-blue">主卡</span></td><td>59元套餐</td><td>市场部</td><td>王经理</td><td><span class="badge badge-green">在用</span></td><td>iPhone 15 Pro</td><td><a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>139****8899</td><td>中国移动</td><td><span class="badge badge-blue">主卡</span></td><td>89元套餐</td><td>研发部</td><td>张工</td><td><span class="badge badge-green">在用</span></td><td>Mate 60 Pro</td><td><a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>136****1122</td><td>中国联通</td><td><span class="badge badge-purple">副卡</span></td><td>副卡共享</td><td>—</td><td>—</td><td><span class="badge badge-amber">闲置</span></td><td>—</td><td><a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>028-8888-1023</td><td>中国电信</td><td><span class="badge badge-gray">座机</span></td><td>企业座机</td><td>财务部</td><td>李姐</td><td><span class="badge badge-green">在用</span></td><td>—</td><td><a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>135****4455</td><td>中国电信</td><td><span class="badge badge-blue">主卡</span></td><td>99元套餐</td><td>财务部</td><td>李姐</td><td><span class="badge badge-green">在用</span></td><td>Huawei P60</td><td><a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>137****9988</td><td>中国移动</td><td><span class="badge badge-blue">主卡</span></td><td>59元套餐</td><td>—</td><td>—</td><td><span class="badge badge-red">注销</span></td><td>—</td><td><a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>133****2233</td><td>中国电信</td><td><span class="badge badge-purple">副卡</span></td><td>副卡共享</td><td>行政部</td><td>—</td><td><span class="badge badge-gray">不再使用</span></td><td>—</td><td><a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除申请，等待管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="view" id="view-reports">
+        <div class="toolbar">
+          <button class="btn btn-outline" onclick="toast('导出设备台账')">导出设备台账</button>
+          <button class="btn btn-outline" onclick="toast('导出部门报表')">导出部门报表</button>
+        </div>
+        <div class="stat-row">
+          <div class="stat-card">
+            <div class="stat-icon" style="background:#dbeafe"><svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/></svg></div>
+            <div class="stat-info"><div class="num">328</div><div class="label">设备总数</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:#dcfce7"><svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/></svg></div>
+            <div class="stat-info"><div class="num">90.2%</div><div class="label">使用率</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:#fef3c7"><svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="stat-info"><div class="num">18</div><div class="label">闲置设备</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:#ede9fe"><svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+            <div class="stat-info"><div class="num">¥126万</div><div class="label">资产总值</div></div>
+          </div>
+        </div>
+        <div class="dash-grid">
+          <div class="panel">
+            <div class="panel-header"><h3>各部门设备分布</h3></div>
+            <div class="panel-body" style="padding:0">
+              <table>
+                <colgroup><col style="width:20%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:20%"></colgroup>
+                <thead><tr><th>部门</th><th>IT设备</th><th>手机</th><th>医疗设备</th><th>电话号码</th><th>设备总数</th></tr></thead>
+                <tbody>
+                  <tr><td>研发部</td><td>86</td><td>15</td><td>0</td><td>18</td><td>119</td></tr>
+                  <tr><td>市场部</td><td>42</td><td>12</td><td>0</td><td>15</td><td>69</td></tr>
+                  <tr><td>财务部</td><td>18</td><td>3</td><td>0</td><td>8</td><td>29</td></tr>
+                  <tr><td>行政部</td><td>15</td><td>2</td><td>0</td><td>6</td><td>23</td></tr>
+                  <tr><td>医疗科室</td><td>12</td><td>0</td><td>21</td><td>5</td><td>38</td></tr>
+                  <tr><td>IT部</td><td>72</td><td>10</td><td>0</td><td>16</td><td>98</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h3>闲置设备清单</h3><div class="actions"><button class="btn btn-outline btn-sm">导出</button></div></div>
+            <div class="panel-body" style="padding:0">
+              <table>
+                <colgroup><col style="width:35%"><col style="width:25%"><col style="width:20%"><col style="width:20%"></colgroup>
+                <thead><tr><th>设备编号</th><th>型号</th><th>入库日期</th><th>闲置天数</th></tr></thead>
+                <tbody>
+                  <tr><td>IT-2023-002</td><td>ThinkPad X1</td><td>2023-03-15</td><td>45天</td></tr>
+                  <tr><td>PH-2023-015</td><td>iPhone 14</td><td>2023-06-20</td><td>32天</td></tr>
+                  <tr><td>IT-2022-078</td><td>MacBook Pro 14</td><td>2022-11-30</td><td>120天</td></tr>
+                  <tr><td>PH-2023-019</td><td>Huawei P50</td><td>2023-08-14</td><td>67天</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="view" id="view-users">
+        <div class="toolbar">
+          <button class="btn btn-primary" onclick="toast('新增账号')">+ 新增账号</button>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h3>数据规则</h3></div>
+          <div class="panel-body" style="background:#fefce8;border-radius:8px;margin:16px">
+            <div style="font-size:13px;color:#92400e;line-height:1.8">
+              <b>系统默认所有数据只增不删。</b>普通角色（部门主管、公司领导）只能查看，不能新增、编辑、删除。<br>
+              新增和编辑：超级管理员、资产管理员可操作。<br>
+              <b style="color:#dc2626">删除：任何人都不能直接删除</b>——点删除后提交删除申请，说明删除原因，经资产管理员或超级管理员审批通过后才执行删除。删除全程记录日志。<br>
+              <b style="color:#64748b">注意：设备流转记录和操作日志属于审计留痕，永不删除。</b>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h3>角色说明</h3></div>
+          <div class="panel-body">
+            <table>
+              <colgroup><col style="width:15%"><col style="width:15%"><col style="width:70%"></colgroup>
+              <thead><tr><th>角色</th><th>人数</th><th>权限范围</th></tr></thead>
+              <tbody>
+                <tr><td><span class="badge badge-red">超级管理员</span></td><td>2</td><td>全部权限：设备管理、流转、报废审批、账号管理、查看所有数据和日志。<b>审批删除申请</b>，审批通过后执行删除</td></tr>
+                <tr><td><span class="badge badge-blue">资产管理员</span></td><td>3</td><td>设备录入编辑、领用归还调拨登记、发起报废申请、电话号码管理。<b>可审批删除申请</b>。不能审批报废、不能管账号</td></tr>
+                <tr><td><span class="badge badge-green">部门主管</span></td><td>6</td><td>只能查看本部门设备清单和电话号码。<b>无新增、无编辑、无删除审批权限</b></td></tr>
+                <tr><td><span class="badge badge-purple">公司领导</span></td><td>3</td><td>审批报废申请，可查看所有报表汇总。<b>无新增、无编辑、无删除权限</b>，不做日常操作</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h3>账号列表</h3></div>
+          <div class="panel-body" style="padding:0">
+            <table>
+              <colgroup><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:25%"></colgroup>
+              <thead><tr><th>账号</th><th>姓名</th><th>角色</th><th>部门</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>admin</td><td>管理员</td><td><span class="badge badge-red">超级管理员</span></td><td>IT部</td><td><span class="badge badge-green">启用</span></td><td><a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('重置密码');return false" style="color:#2563eb">重置密码</a> <a href="#" onclick="toast('已提交删除账号申请，等待超级管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>asset01</td><td>刘运维</td><td><span class="badge badge-blue">资产管理员</span></td><td>IT部</td><td><span class="badge badge-green">启用</span></td><td><a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('重置密码');return false" style="color:#2563eb">重置密码</a> <a href="#" onclick="toast('已提交删除账号申请，等待超级管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>mkt_lead</td><td>王经理</td><td><span class="badge badge-green">部门主管</span></td><td>市场部</td><td><span class="badge badge-green">启用</span></td><td><a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除账号申请，等待超级管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+                <tr><td>leader</td><td>赵总</td><td><span class="badge badge-purple">公司领导</span></td><td>管理层</td><td><span class="badge badge-green">启用</span></td><td><a href="#" onclick="toast('编辑');return false" style="color:#2563eb">编辑</a> <a href="#" onclick="toast('已提交删除账号申请，等待超级管理员审批');return false" style="color:#ef4444">删除</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="view" id="view-logs">
+        <div class="toolbar">
+          <input type="text" placeholder="搜索操作人 / 操作内容...">
+          <select><option>全部模块</option><option>设备档案</option><option>设备流转</option><option>报废管理</option><option>电话号码</option><option>权限管理</option></select>
+          <select><option>全部操作类型</option><option>新增</option><option>编辑</option><option>删除</option><option>审批</option><option>登录</option></select>
+          <input type="date" value="2026-10-04">
+        </div>
+        <div class="panel">
+          <div class="panel-body" style="padding:0">
+            <table>
+              <colgroup><col style="width:15%"><col style="width:10%"><col style="width:10%"><col style="width:15%"><col style="width:35%"><col style="width:15%"></colgroup>
+              <thead><tr><th>时间</th><th>操作人</th><th>模块</th><th>操作类型</th><th>操作内容</th><th>IP 地址</th></tr></thead>
+              <tbody>
+                <tr><td>2026-10-04 10:32:15</td><td>刘运维</td><td>设备流转</td><td><span class="badge badge-blue">领用</span></td><td>登记领用：笔记本 LN-2024-089 → 张工（研发部）</td><td>192.168.1.55</td></tr>
+                <tr><td>2026-10-04 09:48:30</td><td>刘运维</td><td>报废管理</td><td><span class="badge badge-amber">发起</span></td><td>提交报废申请：打印机 PR-2021-012</td><td>192.168.1.55</td></tr>
+                <tr><td>2026-10-04 09:15:02</td><td>张工</td><td>报废管理</td><td><span class="badge badge-amber">发起</span></td><td>提交报废申请：笔记本 LN-2023-045</td><td>192.168.1.102</td></tr>
+                <tr><td>2026-10-03 17:20:44</td><td>刘运维</td><td>设备流转</td><td><span class="badge badge-green">归还</span></td><td>登记归还：显示器 MN-2022-056 ← 李姐（财务部）</td><td>192.168.1.55</td></tr>
+                <tr><td>2026-10-03 15:05:10</td><td>管理员</td><td>电话号码</td><td><span class="badge badge-blue">编辑</span></td><td>号码 138****6677 部门由行政部调至市场部，使用人变更为王经理</td><td>192.168.1.10</td></tr>
+                <tr><td>2026-10-03 14:30:00</td><td>admin</td><td>权限管理</td><td><span class="badge badge-red">新增</span></td><td>新增账号：mkt_lead（王经理），角色：部门主管</td><td>192.168.1.10</td></tr>
+                <tr><td>2026-10-03 09:00:01</td><td>赵总</td><td>报废管理</td><td><span class="badge badge-green">审批</span></td><td>审批通过：显示器 MN-2020-008 报废申请</td><td>192.168.1.20</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== 路由 =====
+const routes = {
+  'dashboard': ['工作台', 'view-dashboard'],
+  'assets-it': ['IT 设备档案', 'view-assets-it'],
+  'assets-phone': ['手机设备档案', 'view-assets-phone'],
+  'assets-medical': ['医疗设备档案', 'view-assets-medical'],
+  'transfer': ['设备流转', 'view-transfer'],
+  'scrap': ['报废管理', 'view-scrap'],
+  'phone': ['电话号码管理', 'view-phone'],
+  'reports': ['报表统计', 'view-reports'],
+  'users': ['权限管理', 'view-users'],
+  'logs': ['操作日志', 'view-logs'],
+};
+
+function navigate(route){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById(routes[route][1]).classList.add('active');
+  document.querySelector('[data-route="'+route+'"]').classList.add('active');
+  document.getElementById('crumb').textContent = routes[route][0];
+}
+
+document.querySelectorAll('.nav-item').forEach(item=>{
+  item.addEventListener('click',()=>navigate(item.dataset.route));
+});
+
+function login(){
+  document.getElementById('view-login').style.display='none';
+  document.getElementById('app').style.display='flex';
+}
+
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.style.display='block';
+  setTimeout(()=>t.style.display='none',2000);
+}
+</script>
+</body>
+</html>

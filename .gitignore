@@ -1,0 +1,14 @@
+node_modules/
+__pycache__/
+*.pyc
+*.db
+*.db.bak
+backups/
+dist/
+dist2/
+win-unpacked/
+*.zip
+*.exe
+*.msi
+.vite/
+.DS_Store

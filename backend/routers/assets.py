@@ -1,0 +1,180 @@
+﻿from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
+from datetime import date
+from typing import Optional
+from database import get_db
+from models import ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, OperationLog
+
+router = APIRouter(prefix="/api/assets", tags=["assets"])
+
+# ===== IT 设备 =====
+class ITAssetIn(BaseModel):
+    asset_number: Optional[str] = None
+    name: str
+    model: Optional[str] = None
+    category: Optional[str] = None
+    user_name: Optional[str] = None
+    department: Optional[str] = None
+    status: str = "idle"
+    purchase_date: Optional[date] = None
+    warranty_expiry: Optional[date] = None
+    price: Optional[float] = None
+    notes: Optional[str] = None
+
+def gen_number(db, model, prefix):
+    year = date.today().year
+    count = db.query(model).filter(model.asset_number.like(f"{prefix}-{year}-%")).count()
+    return f"{prefix}-{year}-{count+1:03d}"
+
+@router.get("/it")
+def list_it(db: Session = Depends(get_db)):
+    return db.query(ITAsset).all()
+
+@router.post("/it")
+def create_it(data: ITAssetIn, db: Session = Depends(get_db)):
+    number = data.asset_number or gen_number(db, ITAsset, "IT")
+    # 如果填了使用人，状态自动设为在用
+    if data.user_name:
+        data.status = "in_use"
+    item = ITAsset(asset_number=number, **{k:v for k,v in data.dict().items() if k != 'asset_number'})
+    db.add(item)
+    db.add(OperationLog(user="admin", module="IT设备", action="新增", detail=f"新增设备 {number}"))
+    db.commit()
+    db.refresh(item)
+    return item
+
+@router.put("/it/{item_id}")
+def update_it(item_id: int, data: ITAssetIn, db: Session = Depends(get_db)):
+    item = db.query(ITAsset).get(item_id)
+    if not item:
+        raise HTTPException(404, "设备不存在")
+    if db.query(ITAsset).filter(ITAsset.asset_number == data.asset_number, ITAsset.id != item_id).first():
+        raise HTTPException(400, f"资产编号 {data.asset_number} 已存在，不能重复")
+    for k, v in data.dict().items():
+        setattr(item, k, v)
+    db.add(OperationLog(user="admin", module="IT设备", action="编辑", detail=f"编辑设备 {item.asset_number}"))
+    db.commit()
+    db.refresh(item)
+    return item
+
+# ===== 手机设备 =====
+class PhoneAssetIn(BaseModel):
+    asset_number: Optional[str] = None
+    brand_model: str
+    imei: Optional[str] = None
+    bound_number: Optional[str] = None
+    user_name: Optional[str] = None
+    department: Optional[str] = None
+    status: str = "idle"
+    purchase_date: Optional[date] = None
+    notes: Optional[str] = None
+
+@router.get("/phone")
+def list_phone(db: Session = Depends(get_db)):
+    return db.query(PhoneAsset).all()
+
+@router.post("/phone")
+def create_phone(data: PhoneAssetIn, db: Session = Depends(get_db)):
+    number = data.asset_number or gen_number(db, PhoneAsset, "PH")
+    if data.user_name:
+        data.status = "in_use"
+    item = PhoneAsset(asset_number=number, **{k:v for k,v in data.dict().items() if k != 'asset_number'})
+    db.add(item)
+    db.add(OperationLog(user="admin", module="手机设备", action="新增", detail=f"新增手机 {number}"))
+    db.commit()
+    db.refresh(item)
+    return item
+
+@router.put("/phone/{item_id}")
+def update_phone(item_id: int, data: PhoneAssetIn, db: Session = Depends(get_db)):
+    item = db.query(PhoneAsset).get(item_id)
+    if not item:
+        raise HTTPException(404, "设备不存在")
+    if db.query(PhoneAsset).filter(PhoneAsset.asset_number == data.asset_number, PhoneAsset.id != item_id).first():
+        raise HTTPException(400, f"资产编号 {data.asset_number} 已存在")
+    for k, v in data.dict().items():
+        setattr(item, k, v)
+    db.commit()
+    db.refresh(item)
+    return item
+
+# ===== 医疗设备 =====
+class MedicalAssetIn(BaseModel):
+    asset_number: Optional[str] = None
+    name: str
+    model: Optional[str] = None
+    department: Optional[str] = None
+    keeper: Optional[str] = None
+    calibration_expiry: Optional[date] = None
+    status: str = "idle"
+    warranty_expiry: Optional[str] = None
+    purchase_date: Optional[date] = None
+    notes: Optional[str] = None
+
+@router.get("/medical")
+def list_medical(db: Session = Depends(get_db)):
+    return db.query(MedicalAsset).all()
+
+@router.post("/medical")
+def create_medical(data: MedicalAssetIn, db: Session = Depends(get_db)):
+    number = data.asset_number or gen_number(db, MedicalAsset, "MED")
+    if data.keeper:
+        data.status = "in_use"
+    item = MedicalAsset(asset_number=number, **{k:v for k,v in data.dict().items() if k != 'asset_number'})
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+@router.put("/medical/{item_id}")
+def update_medical(item_id: int, data: MedicalAssetIn, db: Session = Depends(get_db)):
+    item = db.query(MedicalAsset).get(item_id)
+    if not item:
+        raise HTTPException(404, "设备不存在")
+    if db.query(MedicalAsset).filter(MedicalAsset.asset_number == data.asset_number, MedicalAsset.id != item_id).first():
+        raise HTTPException(400, f"资产编号 {data.asset_number} 已存在")
+    for k, v in data.dict().items():
+        setattr(item, k, v)
+    db.commit()
+    db.refresh(item)
+    return item
+
+# ===== 电话号码 =====
+class PhoneNumberIn(BaseModel):
+    number: str = Field(..., max_length=11, description="电话号码，最多11个字符")
+    carrier: Optional[str] = None
+    card_type: Optional[str] = None
+    plan: Optional[str] = None
+    department: Optional[str] = None
+    user_name: Optional[str] = None
+    bound_device: Optional[str] = None
+    status: str = "in_use"
+    notes: Optional[str] = None
+
+@router.get("/numbers")
+def list_numbers(db: Session = Depends(get_db)):
+    return db.query(PhoneNumber).all()
+
+@router.post("/numbers")
+def create_number(data: PhoneNumberIn, db: Session = Depends(get_db)):
+    if db.query(PhoneNumber).filter(PhoneNumber.number == data.number).first():
+        raise HTTPException(400, f"号码 {data.number} 已存在")
+    item = PhoneNumber(**data.dict())
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+@router.put("/numbers/{item_id}")
+def update_number(item_id: int, data: PhoneNumberIn, db: Session = Depends(get_db)):
+    item = db.query(PhoneNumber).get(item_id)
+    if not item:
+        raise HTTPException(404, "号码不存在")
+    for k, v in data.dict().items():
+        setattr(item, k, v)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
