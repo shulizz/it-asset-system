@@ -2,7 +2,10 @@
   <div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h2>IT 设备档案</h2>
-      <button class="btn-primary" @click="form = { id: null, asset_number:'', name:'', user_name:'', department:'', purchase_date:'' }; showForm = true">+ 新增设备</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <ImportExportButtons module="it" />
+        <button class="btn-primary" @click="form = { id: null, asset_number:'', name:'', user_name:'', department:'', purchase_date:'' }; showForm = true">+ 新增设备</button>
+      </div>
     </div>
 
     <div style="display:flex;gap:12px;margin-bottom:16px">
@@ -71,6 +74,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
+import ImportExportButtons from '../components/ImportExportButtons.vue'
 
 const list = ref([])
 const deptList = ref([])

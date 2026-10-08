@@ -2,7 +2,10 @@
   <div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h2>部门管理</h2>
-      <button class="btn-primary" @click="openForm">+ 新增部门</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <ImportExportButtons module="department" />
+        <button class="btn-primary" @click="openForm">+ 新增部门</button>
+      </div>
     </div>
     <div class="panel">
       <table>
@@ -33,6 +36,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '../api'
+import ImportExportButtons from '../components/ImportExportButtons.vue'
 const list = ref([]), showForm = ref(false), countMap = ref({})
 const form = ref({ id:null, name:'', manager:'', note:'' })
 async function load(){

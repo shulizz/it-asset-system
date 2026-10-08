@@ -2,7 +2,10 @@
 <div class="panel">
   <div style="padding:16px;display:flex;justify-content:space-between;align-items:center">
     <h2>微信账号管理</h2>
-    <button class="btn-primary" @click="openAdd">+ 新增账号</button>
+    <div style="display:flex;gap:8px;align-items:center">
+      <ImportExportButtons module="wechat" />
+      <button class="btn-primary" @click="openAdd">+ 新增账号</button>
+    </div>
   </div>
   <table>
     <thead><tr>
@@ -49,6 +52,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '../api'
+import ImportExportButtons from '../components/ImportExportButtons.vue'
 const list = ref([])
 const showForm = ref(false)
 const form = ref({ id: null, wx_account: '', wx_password: '', real_name: '', user_name: '', purpose: '', status: 'in_use' })

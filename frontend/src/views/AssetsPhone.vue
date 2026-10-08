@@ -2,7 +2,10 @@
   <div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h2>手机设备档案</h2>
-      <button class="btn-primary" @click="form={id:null,asset_number:'',brand_model:'',user_name:'',department:''};showForm=true">+ 新增手机</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <ImportExportButtons module="phone" />
+        <button class="btn-primary" @click="form={id:null,asset_number:'',brand_model:'',user_name:'',department:''};showForm=true">+ 新增手机</button>
+      </div>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:16px">
       <input v-model="filter.keyword" placeholder="搜索编号/型号/使用人" style="flex:1;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px">
@@ -53,6 +56,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
+import ImportExportButtons from '../components/ImportExportButtons.vue'
 const list = ref([]), showForm = ref(false), deptList = ref([])
 const filter = ref({ keyword:'', department:'', status:'' })
 const filteredList = computed(() => {

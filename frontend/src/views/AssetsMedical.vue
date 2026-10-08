@@ -2,7 +2,10 @@
   <div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h2>医疗设备档案</h2>
-      <button class="btn-primary" @click="form={id:null,asset_number:'',name:'',model:'',department:'',keeper:''};showForm=true">+ 新增设备</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <ImportExportButtons module="medical" />
+        <button class="btn-primary" @click="form={id:null,asset_number:'',name:'',model:'',department:'',keeper:'',use_years:null,expiry_date:''};showForm=true">+ 新增设备</button>
+      </div>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:16px">
       <input v-model="filter.keyword" placeholder="搜索编号/名称/保管人" style="flex:1;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px">
@@ -19,11 +22,13 @@
     </div>
     <div class="panel">
       <table>
-        <thead><tr><th>资产编号</th><th>设备名称</th><th>型号</th><th>科室</th><th>保管人</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>资产编号</th><th>设备名称</th><th>型号</th><th>科室</th><th>保管人</th><th>使用年限</th><th>到期时间</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="item in filteredList" :key="item.id">
             <td>{{ item.asset_number }}</td><td>{{ item.name }}</td><td>{{ item.model || '—' }}</td>
             <td>{{ item.department || '—' }}</td><td>{{ item.keeper || '—' }}</td>
+            <td>{{ item.use_years != null ? item.use_years + ' 年' : '—' }}</td>
+            <td>{{ formatDate(item.expiry_date) }}</td>
             <td><span class="badge" :class="statusClass(item.status)">{{ statusText(item.status) }}</span></td>
             <td><a @click="edit(item)" style="color:#2563eb;cursor:pointer;margin-right:10px">编辑</a><a @click="askDelete(item)" style="color:#ef4444;cursor:pointer">申请删除</a></td>
           </tr>
@@ -43,6 +48,8 @@
           </select>
         </div>
         <div class="form-row"><label>保管人</label><input v-model="form.keeper"></div>
+        <div class="form-row"><label>使用年限（年）</label><input type="number" step="0.5" min="0" v-model.number="form.use_years" placeholder="如：5"></div>
+        <div class="form-row"><label>设备到期时间</label><input type="date" v-model="form.expiry_date"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
           <button class="btn-outline" @click="showForm = false">取消</button>
           <button class="btn-primary" @click="save">保存</button>
@@ -54,6 +61,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
+import ImportExportButtons from '../components/ImportExportButtons.vue'
 const list = ref([]), showForm = ref(false), deptList = ref([])
 const filter = ref({ keyword:'', department:'', status:'' })
 const filteredList = computed(() => {
@@ -68,7 +76,7 @@ const filteredList = computed(() => {
     return true
   })
 })
-const form = ref({ id:null, asset_number:'', name:'', model:'', department:'', keeper:'' })
+const form = ref({ id:null, asset_number:'', name:'', model:'', department:'', keeper:'', use_years:null, expiry_date:'' })
 async function load(){ const res = await api.get('/assets/medical'); list.value = res.data }
 function edit(item){ Object.assign(form.value, item); showForm.value = true }
 async function askDelete(item){
@@ -80,10 +88,11 @@ async function askDelete(item){
 async function save(){
   if (form.value.id) await api.put(`/assets/medical/${form.value.id}`, form.value)
   else await api.post('/assets/medical', form.value)
-  showForm.value=false; form.value={id:null,asset_number:'',name:'',model:'',department:'',keeper:''}; load()
+  showForm.value=false; form.value={id:null,asset_number:'',name:'',model:'',department:'',keeper:'',use_years:null,expiry_date:''}; load()
 }
 function statusClass(s){ return {in_use:'green',idle:'amber',scrapped:'red'}[s]||'gray' }
 function statusText(s){ return {in_use:'在用',idle:'闲置',scrapped:'已报废'}[s]||s }
+function formatDate(d){ if(!d) return '—'; return d.substring(0,10) }
 onMounted(async () => { load(); const res = await api.get('/departments'); deptList.value = res.data })
 </script>
 <style scoped>

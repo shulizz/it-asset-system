@@ -4,8 +4,8 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 from database import get_db
-from models import DeleteRequest, OperationLog, ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, ScrapRequest, TransferRecord
-from deps import require_admin
+from models import DeleteRequest, OperationLog, ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, ScrapRequest, TransferRecord, User
+from deps import require_admin, get_current_user
 
 router = APIRouter(prefix="/api/delete-request", tags=["delete-request"])
 
@@ -17,6 +17,13 @@ TABLE_MAP = {
     "scrap_requests": ScrapRequest,
     "transfer_records": TransferRecord,
 }
+
+def set_asset_user(asset, value):
+    """统一设置设备使用人：IT/手机/号码用 user_name，医疗设备用 keeper"""
+    if hasattr(asset, 'user_name'):
+        asset.user_name = value
+    elif hasattr(asset, 'keeper'):
+        asset.keeper = value
 
 class DeleteReqIn(BaseModel):
     table_name: str
@@ -30,20 +37,22 @@ def list_requests(db: Session = Depends(get_db)):
     return db.query(DeleteRequest).order_by(DeleteRequest.id.desc()).all()
 
 @router.post("")
-def create_request(data: DeleteReqIn, db: Session = Depends(get_db)):
+def create_request(data: DeleteReqIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = DeleteRequest(**data.dict())
     db.add(item)
-    db.add(OperationLog(user=data.applicant, module="删除管理", action="申请删除", detail=f"{data.record_desc}，原因：{data.reason}"))
+    db.add(OperationLog(user=current_user.name, module="删除管理", action="申请删除", detail=f"{data.record_desc}，原因：{data.reason}"))
     db.commit()
     return item
 
 @router.put("/{item_id}/approve")
-def approve_request(item_id: int, db: Session = Depends(get_db)):
+def approve_request(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = db.query(DeleteRequest).get(item_id)
     if not item:
         raise HTTPException(404, "申请不存在")
+    if item.status != "pending":
+        raise HTTPException(400, "申请已处理，请勿重复操作")
     item.status = "approved"
-    item.approver = "管理员"
+    item.approver = current_user.name
     item.approved_at = datetime.now()
 
     # 设备申请 → 自动触发对应操作
@@ -63,7 +72,7 @@ def approve_request(item_id: int, db: Session = Depends(get_db)):
                 asset = db.query(model).get(apply_asset_id)
                 if asset:
                     asset.status = 'scrapped'
-                    asset.user_name = None
+                    set_asset_user(asset, None)
                     asset.department = None
             # 在报废管理里留记录
             sr = ScrapRequest(
@@ -82,7 +91,7 @@ def approve_request(item_id: int, db: Session = Depends(get_db)):
                 transfer_number='TR-' + str(int(datetime.now().timestamp()*1000)),
                 type='scrap',
                 asset_desc=item.record_desc,
-                operator='管理员',
+                operator=current_user.name,
                 notes='来自部门主管报废申请审批通过'
             )
             db.add(tr)
@@ -92,7 +101,7 @@ def approve_request(item_id: int, db: Session = Depends(get_db)):
                 transfer_number='TR-' + str(int(datetime.now().timestamp()*1000)),
                 type=apply_type,
                 asset_desc=item.record_desc,
-                operator='管理员',
+                operator=current_user.name,
                 counterparty=apply_user,
                 department=apply_dept or None,
                 asset_type=apply_asset_type,
@@ -109,11 +118,11 @@ def approve_request(item_id: int, db: Session = Depends(get_db)):
                 if asset:
                     if apply_type == 'checkout':
                         asset.status = 'in_use'
-                        asset.user_name = apply_user or asset.user_name
+                        set_asset_user(asset, apply_user or getattr(asset, 'user_name', None) or getattr(asset, 'keeper', None))
                         if apply_dept: asset.department = apply_dept
                     elif apply_type == 'transfer':
                         if apply_dept: asset.department = apply_dept
-                        if apply_user: asset.user_name = apply_user
+                        if apply_user: set_asset_user(asset, apply_user)
     else:
         # 普通删除申请 → 真正删除记录
         model = TABLE_MAP.get(item.table_name)
@@ -122,19 +131,21 @@ def approve_request(item_id: int, db: Session = Depends(get_db)):
             if record:
                 db.delete(record)
 
-    db.add(OperationLog(user='管理员', module="审批管理", action="审批通过", detail=item.record_desc))
+    db.add(OperationLog(user=current_user.name, module="审批管理", action="审批通过", detail=item.record_desc))
     db.commit()
     return item
 
 @router.put("/{item_id}/reject")
-def reject_request(item_id: int, db: Session = Depends(get_db)):
+def reject_request(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = db.query(DeleteRequest).get(item_id)
     if not item:
         raise HTTPException(404, "申请不存在")
+    if item.status != "pending":
+        raise HTTPException(400, "申请已处理，请勿重复操作")
     item.status = "rejected"
-    item.approver = "管理员"
+    item.approver = current_user.name
     item.approved_at = datetime.now()
-    db.add(OperationLog(user="管理员", module="删除管理", action="审批驳回", detail=item.record_desc))
+    db.add(OperationLog(user=current_user.name, module="删除管理", action="审批驳回", detail=item.record_desc))
     db.commit()
     return item
 

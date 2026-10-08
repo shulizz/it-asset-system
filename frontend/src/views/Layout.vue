@@ -24,7 +24,7 @@
         </template>
         <div class="nav-group-title">数据与管理</div>
         <router-link to="/reports" class="nav-item"><span class="nav-dot"></span>报表统计</router-link>
-        <router-link v-if="isDeptLead" to="/apply" class="nav-item"><span class="nav-dot"></span>设备申请</router-link>
+        <router-link to="/apply" class="nav-item"><span class="nav-dot"></span>设备申请</router-link>
         <router-link to="/idle" class="nav-item"><span class="nav-dot"></span>空闲设备</router-link>
         <router-link to="/scrapped" class="nav-item"><span class="nav-dot"></span>报废设备</router-link>
         <router-link v-if="isApprover" to="/delete-approval" class="nav-item"><span class="nav-dot"></span>审批中心</router-link>

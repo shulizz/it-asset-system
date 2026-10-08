@@ -78,8 +78,10 @@ onMounted(async () => {
   const num = await safeGet('/assets/numbers')
   const dept = await safeGet('/departments')
   const scrap = await safeGet('/scrap')
+  const wc = await safeGet('/wechat')
 
-  const allAssets = [...it, ...ph, ...med]
+  // 全部资产类型纳入统计：IT设备、手机、医疗、电话号码、微信
+  const allAssets = [...it, ...ph, ...med, ...num, ...wc]
   stats.value.total = allAssets.length
   stats.value.inUse = allAssets.filter(i => i.status === 'in_use').length
   stats.value.idle = allAssets.filter(i => i.status === 'idle').length
@@ -97,7 +99,6 @@ onMounted(async () => {
   medicalCount.value = med.length
   numberCount.value = num.length
   deptCount.value = dept.length
-  const wc = await safeGet('/wechat')
   wechatCount.value = wc.length
 })
 

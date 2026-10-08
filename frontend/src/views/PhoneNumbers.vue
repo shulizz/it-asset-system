@@ -2,7 +2,10 @@
   <div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h2>电话号码管理</h2>
-      <button class="btn-primary" @click="form={id:null,number:'',carrier:'',card_type:'',department:'',user_name:'',status:'in_use'};showForm=true">+ 新增号码</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <ImportExportButtons module="number" />
+        <button class="btn-primary" @click="form={id:null,number:'',carrier:'',card_type:'',department:'',user_name:'',status:'in_use'};showForm=true">+ 新增号码</button>
+      </div>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:16px">
       <input v-model="filter.keyword" placeholder="搜索号码/使用人" style="flex:1;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px">
@@ -69,6 +72,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
+import ImportExportButtons from '../components/ImportExportButtons.vue'
 const list = ref([]), showForm = ref(false), deptList = ref([])
 const filter = ref({ keyword:'', department:'', status:'' })
 const filteredList = computed(() => {

@@ -1,6 +1,6 @@
 ﻿import axios from 'axios'
 
-function getBaseURL() {
+export function getBaseURL() {
   if (import.meta.env.DEV) return '/api'
   if (window.location.protocol === 'file:') {
     const saved = localStorage.getItem('server_url')

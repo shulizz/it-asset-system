@@ -7,12 +7,10 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from database import get_db
 from models import User, OperationLog
-from deps import require_super_admin
+from deps import require_super_admin, SECRET_KEY, ALGORITHM
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-SECRET_KEY = "it-asset-secret-key-change-in-production"
-ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 12
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -52,14 +50,14 @@ def list_users(db: Session = Depends(get_db), user = Depends(require_super_admin
     return db.query(User).all()
 
 @router.post("/users")
-def create_user(data: UserIn, db: Session = Depends(get_db), user = Depends(require_super_admin)):
+def create_user(data: UserIn, db: Session = Depends(get_db), current_user = Depends(require_super_admin)):
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(400, "用户名已存在")
-    user = User(username=data.username, name=data.name, role=data.role,
+    new_user = User(username=data.username, name=data.name, role=data.role,
                 department=data.department, password_hash=pwd_context.hash(data.password or "123456"))
-    db.add(user)
+    db.add(new_user)
     db.commit()
-    return user
+    return new_user
 
 @router.put("/users/{user_id}")
 def update_user(user_id: int, data: UserIn, db: Session = Depends(get_db), user = Depends(require_super_admin)):

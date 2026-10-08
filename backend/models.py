@@ -65,6 +65,8 @@ class MedicalAsset(Base):
     status = Column(String(20), default="in_use")
     warranty_expiry = Column(String(50))
     purchase_date = Column(Date)
+    use_years = Column(Float)                         # 使用年限（年）
+    expiry_date = Column(Date)                        # 设备到期时间
     notes = Column(Text)
 
 # ===== 电话号码 =====
