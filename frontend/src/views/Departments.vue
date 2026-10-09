@@ -55,15 +55,17 @@ async function load(){
 function openForm(){ form.value = { id:null, name:'', manager:'', note:'' }; showForm.value = true }
 function edit(item){ Object.assign(form.value, item); showForm.value = true }
 async function askDelete(item){
-  if (!confirm(`确定删除部门"${item.name}"？部门下的设备不会被删除，但部门字段会清空。`)) return
-  await api.delete(`/departments/${item.id}`)
-  load()
+  if (!confirm(`确定删除部门"${item.name}"？有关联用户、资产或历史记录的部门需要保留。`)) return
+  try { await api.delete(`/departments/${item.id}`); await load() }
+  catch(e) { alert(e.response?.data?.detail || '删除失败') }
 }
 async function save(){
-  if (form.value.id) await api.put(`/departments/${form.value.id}`, form.value)
-  else await api.post('/departments', form.value)
-  showForm.value = false
-  load()
+  try {
+    if (form.value.id) await api.put(`/departments/${form.value.id}`, form.value)
+    else await api.post('/departments', form.value)
+    showForm.value = false
+    await load()
+  } catch(e) { alert(e.response?.data?.detail || '保存失败') }
 }
 onMounted(load)
 </script>

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h2>用户权限</h2>
@@ -66,6 +66,7 @@
             <option value="department">仅本部门</option><option value="all">全部部门</option>
           </select>
         </div>
+        <p style="font-size:12px;color:#64748b">部门管理、全局日志、微信管理需要全部部门范围；微信密码需同时勾选微信管理。导入和导出需同时勾选对应模块权限。</p>
         <div class="form-row"><label>用户操作权限（可单独调整）</label>
           <p v-if="form.role === 'super_admin'">超级管理员拥有全部权限。</p>
           <div v-else style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -120,8 +121,8 @@ async function save(){
 async function toggle(u){ await api.put(`/auth/users/${u.id}/toggle`); load() }
 async function del(u){
   if(!confirm(`确定删除用户「${u.name}」？此操作不可恢复`)) return
-  await api.delete(`/auth/users/${u.id}`)
-  load()
+  try { await api.delete(`/auth/users/${u.id}`); await load() }
+  catch(e) { alert(e.response?.data?.detail || '删除失败') }
 }
 function roleClass(r){ return r==='super_admin' ? 'red' : 'blue' }
 function roleText(r){ return r==='super_admin' ? '超级管理员' : r }

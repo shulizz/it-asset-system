@@ -38,8 +38,8 @@
             <td>{{ item.notes || '—' }}</td>
             <td>{{ item.purchase_date || '—' }}</td>
             <td>
-              <a @click="edit(item)" style="color:#2563eb;cursor:pointer;margin-right:10px">编辑</a>
-              <a @click="askDelete(item)" style="color:#ef4444;cursor:pointer">申请删除</a>
+              <a v-if="canWriteAssets" @click="edit(item)" style="color:#2563eb;cursor:pointer;margin-right:10px">编辑</a>
+              <a v-if="canWriteAssets" @click="askDelete(item)" style="color:#ef4444;cursor:pointer">申请删除</a>
             </td>
           </tr>
         </tbody>
@@ -72,6 +72,8 @@
 </template>
 
 <script setup>
+import { usePermissions } from '../usePermissions'
+const { canWriteAssets } = usePermissions()
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import ImportExportButtons from '../components/ImportExportButtons.vue'
@@ -105,7 +107,7 @@ function edit(item) {
 }
 
 async function askDelete(item) {
-  const reason = prompt(`申请删除设备 ${item.asset_number} ${item.name}，请输入删除原因：`)
+  const reason = prompt(`申请删除设备 ${item.asset_number} ${item.name}，审批通过后会移出档案并保留历史，请输入原因：`)
   if (!reason) return
   await api.post('/delete-request', {
     table_name: 'it_assets',

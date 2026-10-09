@@ -1,6 +1,7 @@
 ﻿<template>
   <div>
-    <h2 style="margin-bottom:20px">报表统计 <button class="btn-export" @click="exportCSV">导出Excel</button></h2>
+    <h2 style="margin-bottom:20px">报表统计 <button v-if="canExport" class="btn-export" @click="exportCSV">导出Excel</button></h2>
+    <p v-if="loadError" style="color:#b45309">{{ loadError }}</p>
     <div class="stats">
       <div class="card"><div class="num">{{ total.it }}</div><div class="label">IT设备</div></div>
       <div class="card"><div class="num">{{ total.phone }}</div><div class="label">手机</div></div>
@@ -42,65 +43,43 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted } from 'vue'
-import * as XLSX from 'xlsx'
+import { ref, computed, onMounted } from 'vue'
 import api from '../api'
+const currentUser = ref({permissions: []})
+const canExport = computed(() => currentUser.value.permissions.includes('export'))
+const loadError = ref('')
 const total = ref({ it:0, phone:0, medical:0, number:0, wechat:0 })
 const status = ref({ inUse:0, idle:0, scrapped:0 })
 const deptCount = ref(0)
 const deptStats = ref([])
 const idleList = ref([])
 async function exportCSV(){
-  const [it, phone, medical, numbers] = await Promise.all([
-    api.get('/assets/it'), api.get('/assets/phone'),
-    api.get('/assets/medical'), api.get('/assets/numbers')
-  ])
-  const wb = XLSX.utils.book_new()
-
-  const itData = it.data.map(i => ({
-    '资产编号': i.asset_number, '设备名称': i.name, '使用人': i.user_name||'',
-    '部门': i.department||'', '状态': statusText(i.status), '采购日期': i.purchase_date||''
-  }))
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(itData), 'IT设备')
-
-  const phData = phone.data.map(i => ({
-    '资产编号': i.asset_number, '品牌型号': i.brand_model, '使用人': i.user_name||'',
-    '部门': i.department||'', '状态': statusText(i.status)
-  }))
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(phData), '手机设备')
-
-  const medData = medical.data.map(i => ({
-    '资产编号': i.asset_number, '设备名称': i.name, '型号': i.model||'',
-    '科室': i.department||'', '保管人': i.keeper||'', '状态': statusText(i.status)
-  }))
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(medData), '医疗设备')
-
-  const numData = numbers.data.map(i => ({
-    '号码': i.number, '运营商': i.carrier||'', '类型': cardText(i.card_type),
-    '套餐': i.plan||'', '部门': i.department||'', '使用人': i.user_name||'', '状态': numStatusText(i.status)
-  }))
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(numData), '电话号码')
-
-  const deptData = deptStats.value.map(d => ({
-    '部门': d.name, 'IT设备': d.it, '手机': d.phone, '医疗设备': d.medical, '电话号码': d.number
-  }))
-  const wcData = (wc.data||[]).filter(x=>x.wx_account).map(i => ({
-    '微信账号': i.wx_account, '实名人': i.real_name||'', '使用人': i.user_name||'', '用途': i.purpose||'', '状态': i.status==='in_use'?'使用中':'停用'
-  }))
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(wcData), '微信账号')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(deptData), '部门统计')
-
-  XLSX.writeFile(wb, `资产报表_${new Date().toISOString().slice(0,10)}.xlsx`)
+  try {
+    const res = await api.get('/reports/export', {responseType: 'blob'})
+    const url = URL.createObjectURL(res.data), a = document.createElement('a')
+    a.href = url; a.download = `资产报表_${new Date().toISOString().slice(0,10)}.xlsx`
+    a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch { alert('报表导出失败，请检查权限或稍后重试') }
 }
 function statusText(s){ return {in_use:'在用',idle:'闲置',scrapped:'已报废'}[s]||s }
 function cardText(t){ return {main:'主卡',sub:'副卡',landline:'座机'}[t]||t }
 function numStatusText(s){ return {in_use:'在用',idle:'闲置',cancelled:'注销',unused:'不再使用'}[s]||s }
 onMounted(async () => {
+  try { currentUser.value = (await api.get('/auth/me')).data }
+  catch { loadError.value = '无法读取用户权限，请重新登录'; return }
+  const errors = []
+  async function fetchModule(path, label){
+    try { return await api.get(path) }
+    catch { errors.push(label); return {data: []} }
+  }
+  const canWechat = currentUser.value.permissions.includes('wechat') && (currentUser.value.role === 'super_admin' || currentUser.value.data_scope === 'all')
   const [it, phone, medical, numbers, depts, wc] = await Promise.all([
-    api.get('/assets/it'), api.get('/assets/phone'), api.get('/assets/medical'),
-    api.get('/assets/numbers'), api.get('/departments'), api.get('/wechat')
+    fetchModule('/assets/it', 'IT设备'), fetchModule('/assets/phone', '手机'), fetchModule('/assets/medical', '医疗设备'),
+    fetchModule('/assets/numbers', '电话号码'), fetchModule('/departments', '部门'),
+    canWechat ? fetchModule('/wechat', '微信账号') : Promise.resolve({data: []})
   ])
-  total.value = { it: it.data.length, phone: phone.data.length, medical: medical.data.length, number: numbers.data.length, wechat: wc.data.filter(x=>x.wx_account).length }
+  if(errors.length) loadError.value = `${errors.join('、')}加载失败，相关统计不完整，请刷新重试`
+  total.value = { it: it.data.length, phone: phone.data.length, medical: medical.data.length, number: numbers.data.length, wechat: canWechat ? wc.data.filter(x=>x.wx_account).length : '无权限' }
   deptCount.value = depts.data.length
 
   const all = [

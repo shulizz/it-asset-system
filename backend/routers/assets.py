@@ -1,9 +1,10 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+from numbering import next_asset_number
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from datetime import date
 from typing import Optional
-from database import get_db
+from database import get_db, get_write_db
 from models import ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, OperationLog, User, Department
 from deps import get_current_user, require_perm, scope_query, check_scope, require_any
 
@@ -24,9 +25,8 @@ class ITAssetIn(BaseModel):
     notes: Optional[str] = None
 
 def gen_number(db, model, prefix):
-    year = date.today().year
-    count = db.query(model).filter(model.asset_number.like(f"{prefix}-{year}-%")).count()
-    return f"{prefix}-{year}-{count+1:03d}"
+    return next_asset_number(db, model, prefix)
+
 
 def sync_department_id(db, item):
     department = db.query(Department).filter(Department.name == item.department).first() if item.department else None
@@ -39,10 +39,12 @@ def list_it(db: Session = Depends(get_db), current_user: User = Depends(require_
     return scope_query(db.query(ITAsset), ITAsset, current_user).all()
 
 @router.post("/it")
-def create_it(data: ITAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+def create_it(data: ITAssetIn, db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
     number = data.asset_number or gen_number(db, ITAsset, "IT")
     if data.user_name:
         data.status = "in_use"
+    if db.query(ITAsset).filter(ITAsset.asset_number == number).first():
+        raise HTTPException(409, "资产编号已存在")
     item = ITAsset(asset_number=number, **{k:v for k,v in data.dict().items() if k != 'asset_number'})
     sync_department_id(db, item)
     check_scope(item, current_user)
@@ -53,7 +55,7 @@ def create_it(data: ITAssetIn, db: Session = Depends(get_db), current_user: User
     return item
 
 @router.put("/it/{item_id}")
-def update_it(item_id: int, data: ITAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+def update_it(item_id: int, data: ITAssetIn, db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
     item = scope_query(db.query(ITAsset), ITAsset, current_user).filter(ITAsset.id == item_id).first()
     if not item:
         raise HTTPException(404, "设备不存在")
@@ -88,10 +90,12 @@ def list_phone(db: Session = Depends(get_db), current_user: User = Depends(requi
     return scope_query(db.query(PhoneAsset), PhoneAsset, current_user).all()
 
 @router.post("/phone")
-def create_phone(data: PhoneAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+def create_phone(data: PhoneAssetIn, db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
     number = data.asset_number or gen_number(db, PhoneAsset, "PH")
     if data.user_name:
         data.status = "in_use"
+    if db.query(PhoneAsset).filter(PhoneAsset.asset_number == number).first():
+        raise HTTPException(409, "资产编号已存在")
     item = PhoneAsset(asset_number=number, **{k:v for k,v in data.dict().items() if k != 'asset_number'})
     sync_department_id(db, item)
     check_scope(item, current_user)
@@ -102,7 +106,7 @@ def create_phone(data: PhoneAssetIn, db: Session = Depends(get_db), current_user
     return item
 
 @router.put("/phone/{item_id}")
-def update_phone(item_id: int, data: PhoneAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+def update_phone(item_id: int, data: PhoneAssetIn, db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
     item = scope_query(db.query(PhoneAsset), PhoneAsset, current_user).filter(PhoneAsset.id == item_id).first()
     if not item:
         raise HTTPException(404, "设备不存在")
@@ -140,10 +144,12 @@ def list_medical(db: Session = Depends(get_db), current_user: User = Depends(req
     return scope_query(db.query(MedicalAsset), MedicalAsset, current_user).all()
 
 @router.post("/medical")
-def create_medical(data: MedicalAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+def create_medical(data: MedicalAssetIn, db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
     number = data.asset_number or gen_number(db, MedicalAsset, "MED")
     if data.keeper:
         data.status = "in_use"
+    if db.query(MedicalAsset).filter(MedicalAsset.asset_number == number).first():
+        raise HTTPException(409, "资产编号已存在")
     item = MedicalAsset(asset_number=number, **{k:v for k,v in data.dict().items() if k != 'asset_number'})
     sync_department_id(db, item)
     check_scope(item, current_user)
@@ -154,7 +160,7 @@ def create_medical(data: MedicalAssetIn, db: Session = Depends(get_db), current_
     return item
 
 @router.put("/medical/{item_id}")
-def update_medical(item_id: int, data: MedicalAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+def update_medical(item_id: int, data: MedicalAssetIn, db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
     item = scope_query(db.query(MedicalAsset), MedicalAsset, current_user).filter(MedicalAsset.id == item_id).first()
     if not item:
         raise HTTPException(404, "设备不存在")
@@ -189,7 +195,7 @@ def list_numbers(db: Session = Depends(get_db), current_user: User = Depends(req
     return scope_query(db.query(PhoneNumber), PhoneNumber, current_user).all()
 
 @router.post("/numbers")
-def create_number(data: PhoneNumberIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+def create_number(data: PhoneNumberIn, db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
     if db.query(PhoneNumber).filter(PhoneNumber.number == data.number).first():
         raise HTTPException(400, f"号码 {data.number} 已存在")
     data.status = "in_use" if data.user_name else "idle"
@@ -203,7 +209,7 @@ def create_number(data: PhoneNumberIn, db: Session = Depends(get_db), current_us
     return item
 
 @router.put("/numbers/{item_id}")
-def update_number(item_id: int, data: PhoneNumberIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+def update_number(item_id: int, data: PhoneNumberIn, db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
     item = scope_query(db.query(PhoneNumber), PhoneNumber, current_user).filter(PhoneNumber.id == item_id).first()
     if not item:
         raise HTTPException(404, "号码不存在")
@@ -226,7 +232,7 @@ def list_expiring(days: int = 30, db: Session = Depends(get_db), current_user: U
     return get_expiring_medical(db, days, current_user)
 
 @router.post("/medical/send-expiry-email")
-def send_expiry_email(days: int = 30, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+def send_expiry_email(days: int = 30, db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
     if current_user.role != 'super_admin' and current_user.data_scope != 'all':
         raise HTTPException(403, '发送全局到期提醒需要全部部门数据范围')
     from notifier import send_expiry_notice

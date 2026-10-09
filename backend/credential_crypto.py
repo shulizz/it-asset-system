@@ -20,8 +20,6 @@ def _fernet():
 def encrypt_credential(value):
     if value is None or value == "":
         return value
-    if isinstance(value, str) and value.startswith(_PREFIX):
-        return value
     token = _fernet().encrypt(str(value).encode("utf-8")).decode("ascii")
     return _PREFIX + token
 

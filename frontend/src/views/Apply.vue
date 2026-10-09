@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div>
     <h2 style="margin-bottom:20px">设备申请</h2>
     <div class="panel">
@@ -8,7 +8,7 @@
       <table>
         <thead><tr><th>申请号</th><th>申请类型</th><th>申请内容</th><th>使用人</th><th>部门</th><th>状态</th><th>提交时间</th></tr></thead>
         <tbody>
-          <tr v-for="item in list" :key="item.id">
+          <tr v-for="item in list" :key="item.key">
             <td>{{ item.request_no }}</td>
             <td><span class="badge" :class="typeClass(item.type)">{{ typeText(item.type) }}</span></td>
             <td>{{ item.content }}</td>
@@ -69,6 +69,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '../api'
+import { applicationRows } from '../applicationRows'
 const list = ref([]), showForm = ref(false), deptList = ref([])
 const form = ref({ type:'scrap', assetType:'', deptFilter:'', assetId:null, content:'', user_name:'', department:'' })
 const assetList = ref([])
@@ -76,7 +77,7 @@ async function loadAssets(){
   if (!form.value.assetType) { assetList.value = []; return }
   const map = { it:'/assets/it', phone:'/assets/phone', medical:'/assets/medical' }
   const res = await api.get(map[form.value.assetType])
-  let list = res.data
+  let list = res.data.filter(a => ['idle', 'in_use'].includes(a.status))
   if (form.value.deptFilter) list = list.filter(a => a.department === form.value.deptFilter)
   assetList.value = list
 }
@@ -89,7 +90,7 @@ async function load(){
   // 从删除审批表借用，用类型区分
   const res = await api.get('/delete-request')
   const scraps = await api.get('/scrap')
-  list.value = [...res.data.filter(r => r.table_name === 'apply_requests'), ...scraps.data.map(r => ({...r, record_desc:r.asset_desc, type:'scrap', status:r.status === 'pending_approval' ? 'pending' : r.status}))]
+  list.value = applicationRows(res.data, scraps.data)
 }
 async function save(){
   if (!form.value.content) { alert('请填写申请说明'); return }
@@ -111,7 +112,10 @@ async function save(){
       table_name: 'apply_requests',
       record_id: 0,
       record_desc: form.value.content,
-      reason: `${form.value.type}|${form.value.user_name}|${form.value.department}|${form.value.assetType||''}|${form.value.assetId||0}`,
+      reason: form.value.content,
+      application_type: form.value.type, target_user: form.value.user_name,
+      target_department_id: deptList.value.find(d => d.name === form.value.department)?.id || null,
+      asset_type: form.value.assetType, asset_id: form.value.assetId,
       applicant: '部门主管'
     })
   }

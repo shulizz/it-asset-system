@@ -1,7 +1,13 @@
-﻿from sqlalchemy import Column, Integer, String, Date, DateTime, Text, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Date, DateTime, Text, Float, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
+import secrets
 from database import Base
+
+class AssetSequence(Base):
+    __tablename__ = "asset_sequences"
+    name = Column(String(50), primary_key=True)
+    value = Column(Integer, nullable=False)
 
 # ===== 部门 =====
 class Department(Base):
@@ -31,6 +37,7 @@ class User(Base):
     data_scope = Column(String(20), nullable=False, default="department")
     department = Column(String(50))
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
+    token_version = Column(Integer, nullable=False, default=lambda: secrets.randbits(53), server_default='0')
     is_active = Column(Integer, default=1)  # 1启用 0停用
 
 # ===== IT设备 =====
@@ -100,6 +107,10 @@ class PhoneNumber(Base):
 
 # ===== 设备流转记录 =====
 class TransferRecord(Base):
+    department_id = Column(Integer, ForeignKey("departments.id"), index=True)
+    new_department_id = Column(Integer, ForeignKey("departments.id"), index=True)
+    operator_id = Column(Integer, ForeignKey("users.id"))
+    old_user = Column(String(50))
     __tablename__ = "transfer_records"
     id = Column(Integer, primary_key=True, index=True)
     transfer_number = Column(String(50), unique=True, index=True, nullable=False)
@@ -117,6 +128,9 @@ class TransferRecord(Base):
 
 # ===== 报废申请 =====
 class ScrapRequest(Base):
+    department_id = Column(Integer, ForeignKey("departments.id"), index=True)
+    applicant_id = Column(Integer, ForeignKey("users.id"), index=True)
+    approver_id = Column(Integer, ForeignKey("users.id"))
     __tablename__ = "scrap_requests"
     id = Column(Integer, primary_key=True, index=True)
     request_number = Column(String(50), unique=True, index=True, nullable=False)
@@ -134,6 +148,14 @@ class ScrapRequest(Base):
 
 # ===== 删除申请 =====
 class DeleteRequest(Base):
+    department_id = Column(Integer, ForeignKey("departments.id"), index=True)
+    applicant_id = Column(Integer, ForeignKey("users.id"), index=True)
+    approver_id = Column(Integer, ForeignKey("users.id"))
+    application_type = Column(String(20))
+    target_user = Column(String(50))
+    target_department_id = Column(Integer, ForeignKey("departments.id"))
+    asset_type = Column(String(20))
+    asset_id = Column(Integer)
     __tablename__ = "delete_requests"
     id = Column(Integer, primary_key=True, index=True)
     table_name = Column(String(50), nullable=False)   # 从哪张表删

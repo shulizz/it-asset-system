@@ -28,10 +28,10 @@
         <router-link v-if="perms.includes('idle')" to="/idle" class="nav-item"><span class="nav-dot"></span>空闲设备</router-link>
         <router-link v-if="perms.includes('scrapped')" to="/scrapped" class="nav-item"><span class="nav-dot"></span>报废设备</router-link>
         <router-link v-if="perms.includes('approval')" to="/delete-approval" class="nav-item"><span class="nav-dot"></span>审批中心</router-link>
-        <router-link v-if="perms.includes('departments')" to="/departments" class="nav-item"><span class="nav-dot"></span>部门管理</router-link>
+        <router-link v-if="perms.includes('departments') && (user.role === 'super_admin' || user.data_scope === 'all')" to="/departments" class="nav-item"><span class="nav-dot"></span>部门管理</router-link>
         <router-link v-if="perms.includes('users')" to="/users" class="nav-item"><span class="nav-dot"></span>用户权限</router-link>
         <router-link v-if="perms.includes('roles')" to="/roles" class="nav-item"><span class="nav-dot"></span>角色权限</router-link>
-        <router-link v-if="perms.includes('logs')" to="/logs" class="nav-item"><span class="nav-dot"></span>操作日志</router-link>
+        <router-link v-if="perms.includes('logs') && (user.role === 'super_admin' || user.data_scope === 'all')" to="/logs" class="nav-item"><span class="nav-dot"></span>操作日志</router-link>
       </nav>
       <div class="sidebar-footer">
         <div class="user-info">

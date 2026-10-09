@@ -6,13 +6,13 @@
     </div>
     <div class="panel">
       <table>
-        <thead><tr><th>工单号</th><th>类型</th><th>设备</th><th>经手人</th><th>对方</th><th>部门</th><th>日期</th><th>备注</th></tr></thead>
+        <thead><tr><th>工单号</th><th>类型</th><th>设备</th><th>经手人</th><th>对方</th><th>原部门</th><th>目标部门</th><th>原使用人</th><th>新使用人</th><th>日期</th><th>备注</th></tr></thead>
         <tbody>
           <tr v-for="item in list" :key="item.id">
             <td>{{ item.transfer_number }}</td>
             <td><span class="badge" :class="typeClass(item.type)">{{ typeText(item.type) }}</span></td>
             <td>{{ item.asset_desc }}</td><td>{{ item.operator }}</td><td>{{ item.counterparty || '—' }}</td>
-            <td>{{ item.department || '—' }}</td><td>{{ item.transfer_date || '—' }}</td><td>{{ item.notes || '—' }}</td>
+            <td>{{ item.department || '—' }}</td><td>{{ item.new_dept || '—' }}</td><td>{{ item.old_user || '—' }}</td><td>{{ item.new_user || '—' }}</td><td>{{ item.transfer_date || '—' }}</td><td>{{ item.notes || '—' }}</td>
           </tr>
         </tbody>
       </table>
@@ -43,7 +43,7 @@
           </select>
         </div>
         <div v-if="selectedAsset" class="asset-info">
-          <span>当前使用人：{{ selectedAsset.user_name || '无' }}</span>
+          <span>当前使用人：{{ selectedAsset.user_name || selectedAsset.keeper || '无' }}</span>
           <span>当前部门：{{ selectedAsset.department || '无' }}</span>
         </div>
         <div class="form-row"><label>{{ typeLabel }}</label>

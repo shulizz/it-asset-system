@@ -6,6 +6,7 @@ from database import get_db
 from models import User, Role
 import json
 import os
+from permissions import PERMISSION_KEYS, GLOBAL_PERMISSIONS
 
 SECRET_KEY = os.getenv("IT_ASSET_SECRET_KEY")
 if not SECRET_KEY or SECRET_KEY == "it-asset-secret-key-change-in-production":
@@ -26,19 +27,20 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security), db
     user = db.query(User).filter(User.username == username, User.is_active == 1).first()
     if not user:
         raise HTTPException(401, "用户不存在或已停用")
+    if payload.get("ver") != (user.token_version or 0) or payload.get("uid") != user.id:
+        raise HTTPException(401, "登录状态已失效，请重新登录")
     return user
 
 def get_user_permissions(user: User, db: Session) -> list:
     """获取用户权限列表"""
     if user.role == "super_admin":
-        return ["assets", "transfer", "scrap", "approval", "reports", "idle",
-                "scrapped", "departments", "logs", "users", "roles", "assets_write", "import", "export", "wechat", "wechat_secret", "apply"]
+        return sorted(PERMISSION_KEYS | {"users", "roles"})
     if user.permissions is not None:
         try:
             permissions = json.loads(user.permissions)
             if not isinstance(permissions, list):
                 return []
-            return sorted(set(p for p in permissions if isinstance(p, str)))
+            return sorted(PERMISSION_KEYS.intersection(p for p in permissions if isinstance(p, str)))
         except (ValueError, TypeError):
             return []
     role_obj = db.query(Role).filter(Role.id == user.role_id).first() if user.role_id else None
@@ -46,7 +48,7 @@ def get_user_permissions(user: User, db: Session) -> list:
         role_obj = db.query(Role).filter(Role.name == user.role).first()
     if role_obj and role_obj.permissions:
         try:
-            return expand_legacy_permissions(json.loads(role_obj.permissions))
+            return sorted(PERMISSION_KEYS.intersection(json.loads(role_obj.permissions)))
         except Exception:
             return []
     return []
@@ -57,6 +59,8 @@ def require_perm(perm: str):
         perms = get_user_permissions(user, db)
         if perm not in perms:
             raise HTTPException(403, f"没有「{perm}」权限")
+        if perm in GLOBAL_PERMISSIONS and user.role != 'super_admin' and user.data_scope != 'all':
+            raise HTTPException(403, '此权限需要全部部门数据范围')
         return user
     return checker
 
@@ -79,19 +83,16 @@ def require_super_admin(user: User = Depends(get_current_user)):
     return user
 
 
-def expand_legacy_permissions(perms):
-    result = set(perms)
-    if 'assets' in result:
-        result.update(['assets_write', 'import', 'export', 'wechat', 'wechat_secret'])
-    result.add('apply')
-    return sorted(result)
-
 def scope_query(query, model, user):
+    if hasattr(model, 'asset_number') or getattr(model, '__tablename__', '') == 'phone_numbers':
+        query = query.filter(model.status != 'archived')
     if user.role == 'super_admin' or user.data_scope == 'all':
         return query
     if not user.department_id:
         return query.filter(False)
     if hasattr(model, 'department_id'):
+        if hasattr(model, 'new_department_id'):
+            return query.filter((model.department_id == user.department_id) | (model.new_department_id == user.department_id))
         return query.filter(model.department_id == user.department_id)
     if hasattr(model, 'department'):
         return query.filter(model.department == user.department)

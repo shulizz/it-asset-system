@@ -36,7 +36,7 @@
               <span v-else class="badge green">{{ daysLeft(item.expiry_date) }}天</span>
             </td>
             <td><span class="badge" :class="statusClass(item.status)">{{ statusText(item.status) }}</span></td>
-            <td><a @click="edit(item)" style="color:#2563eb;cursor:pointer;margin-right:10px">编辑</a><a @click="askDelete(item)" style="color:#ef4444;cursor:pointer">申请删除</a></td>
+            <td><a v-if="canWriteAssets" @click="edit(item)" style="color:#2563eb;cursor:pointer;margin-right:10px">编辑</a><a v-if="canWriteAssets" @click="askDelete(item)" style="color:#ef4444;cursor:pointer">申请删除</a></td>
           </tr>
         </tbody>
       </table>
@@ -65,6 +65,8 @@
   </div>
 </template>
 <script setup>
+import { usePermissions } from '../usePermissions'
+const { canWriteAssets } = usePermissions()
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import ImportExportButtons from '../components/ImportExportButtons.vue'
@@ -86,7 +88,7 @@ const form = ref({ id:null, asset_number:'', name:'', model:'', department:'', k
 async function load(){ const res = await api.get('/assets/medical'); list.value = res.data }
 function edit(item){ Object.assign(form.value, item); showForm.value = true }
 async function askDelete(item){
-  const reason = prompt(`申请删除设备 ${item.asset_number} ${item.name}，请输入删除原因：`)
+  const reason = prompt(`申请删除设备 ${item.asset_number} ${item.name}，审批通过后会移出档案并保留历史，请输入原因：`)
   if (!reason) return
   await api.post('/delete-request', { table_name:'medical_assets', record_id:item.id, record_desc:`${item.asset_number} ${item.name}`, reason:reason })
   alert('删除申请已提交，等待管理员审批')

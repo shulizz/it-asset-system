@@ -3,11 +3,12 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from deps import require_super_admin
+from database import engine
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "it_assets.db")
-BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "backups")
+DB_PATH = os.path.abspath(engine.url.database)
+BACKUP_DIR = os.getenv('IT_ASSET_BACKUP_DIR', os.path.join(os.path.dirname(DB_PATH), 'backups'))
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
 def do_backup():

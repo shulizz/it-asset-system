@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -17,7 +17,11 @@ def account_view(item, user, db):
     if 'wechat_secret' not in get_user_permissions(user, db):
         data['wx_password'] = None
     else:
-        data['wx_password'] = decrypt_credential(data['wx_password'])
+        try:
+            data['wx_password'] = decrypt_credential(data['wx_password'])
+        except RuntimeError:
+            data['wx_password'] = None
+            data['password_error'] = '密码无法解密，请重新设置此记录密码'
     return data
 
 def check_password_access(data, user, db):

@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -6,7 +6,7 @@ import os
 from database import engine, SessionLocal, Base
 from models import User, Department, Role
 from passlib.context import CryptContext
-from routers import auth, assets, transfer, scrap, delete_req, logs, departments, backup, version, wechat, import_export
+from routers import auth, assets, transfer, scrap, delete_req, logs, departments, backup, version, wechat, import_export, reports
 
 Base.metadata.create_all(bind=engine)
 
@@ -38,6 +38,9 @@ with engine.connect() as conn:
             conn.commit()
         except: pass
 
+from migrations import migrate_workflow
+migrate_workflow(engine)
+
 app = FastAPI(title="IT资产管理系统 API")
 
 app.add_middleware(
@@ -60,6 +63,7 @@ app.include_router(backup.router)
 app.include_router(version.router)
 app.include_router(wechat.router)
 app.include_router(import_export.router)
+app.include_router(reports.router)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

@@ -87,18 +87,21 @@ async function load(){
   const [d, s] = await Promise.all([api.get('/delete-request'), api.get('/scrap')])
   // 分离申请和删除
   applyList.value = d.data.filter(r => r.table_name === 'apply_requests').map(r => {
-    const parts = (r.reason || '||||').split('|')
-    return { ...r, applyType: parts[0]||'', applyUser: parts[1]||'', applyDept: parts[2]||'', applyAsset: parts[3]||'' }
+    return { ...r, applyType: r.application_type || '旧申请待核对', applyUser: r.target_user || r.applicant || '', applyDept: r.department || '', applyAsset: r.asset_type || '' }
   })
   deleteList.value = d.data.filter(r => r.table_name !== 'apply_requests')
   scrapList.value = s.data
 }
-async function approveDel(item){ await api.put(`/delete-request/${item.id}/approve`); load() }
-async function rejectDel(item){ await api.put(`/delete-request/${item.id}/reject`); load() }
-async function approveScrap(item){ await api.put(`/scrap/${item.id}/approve`); load() }
-async function rejectScrap(item){ await api.put(`/scrap/${item.id}/reject`); load() }
-async function approveApply(item){ await api.put(`/delete-request/${item.id}/approve`); load() }
-async function rejectApply(item){ await api.put(`/delete-request/${item.id}/reject`); load() }
+async function decide(path){
+  try { await api.put(path); await load() }
+  catch(e) { alert(e.response?.data?.detail || '审批失败，请刷新后重试') }
+}
+async function approveDel(item){ await decide(`/delete-request/${item.id}/approve`) }
+async function rejectDel(item){ await decide(`/delete-request/${item.id}/reject`) }
+async function approveScrap(item){ await decide(`/scrap/${item.id}/approve`) }
+async function rejectScrap(item){ await decide(`/scrap/${item.id}/reject`) }
+async function approveApply(item){ await decide(`/delete-request/${item.id}/approve`) }
+async function rejectApply(item){ await decide(`/delete-request/${item.id}/reject`) }
 
 function statusClass(s){ return {pending:'amber',approved:'green',rejected:'red'}[s]||'gray' }
 function statusText(s){ return {pending:'待审批',approved:'已通过',rejected:'已驳回'}[s]||s }

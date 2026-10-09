@@ -1,3 +1,4 @@
+from numbering import next_asset_number
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -5,13 +6,15 @@ from sqlalchemy import inspect
 from io import BytesIO
 from datetime import date, datetime
 from typing import Optional, List
-from database import get_db
+from database import get_db, get_write_db
 from models import (
     ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, WeChatAccount,
     Department, OperationLog, User
 )
 from deps import get_current_user, get_user_permissions, scope_query, check_scope
 from credential_crypto import encrypt_credential
+from permissions import module_permission
+from excel_input import MAX_UPLOAD, read_rows
 
 router = APIRouter(prefix="/api/ie", tags=["导入导出"])
 
@@ -126,7 +129,9 @@ def _get_module(name: str):
 
 
 def _authorize_module(module: str, user: User, db: Session, action="export"):
-    required = "departments" if module == "department" else "wechat" if module == "wechat" else "assets"
+    required = module_permission(module)
+    if module in ('department', 'wechat') and user.role != 'super_admin' and user.data_scope != 'all':
+        raise HTTPException(403, '此模块需要全部部门数据范围')
     perms = get_user_permissions(user, db)
     if required not in perms or action not in perms:
         raise HTTPException(403, f"没有「{required}」权限")
@@ -135,9 +140,7 @@ def _authorize_module(module: str, user: User, db: Session, action="export"):
 
 
 def _gen_asset_number(db, model, prefix):
-    year = date.today().year
-    count = db.query(model).filter(model.asset_number.like(f"{prefix}-{year}-%")).count()
-    return f"{prefix}-{year}-{count+1:03d}"
+    return next_asset_number(db, model, prefix)
 
 
 def _parse_date(val):
@@ -153,16 +156,20 @@ def _parse_date(val):
             return datetime.strptime(s, fmt).date()
         except ValueError:
             continue
-    return None
+    raise ValueError("日期格式无效")
 
 
 def _parse_float(val):
     if val is None or val == "":
         return None
     try:
-        return float(val)
+        import math
+        value = float(val)
+        if not math.isfinite(value):
+            raise ValueError("数值必须为有限数字")
+        return value
     except (ValueError, TypeError):
-        return None
+        raise ValueError("数值格式无效")
 
 
 @router.get("/{module}/export")
@@ -252,10 +259,10 @@ def download_template(
 
 
 @router.post("/{module}/import")
-async def import_excel(
+def import_excel(
     module: str,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_write_db),
     current_user: User = Depends(get_current_user),
 ):
     cfg = _get_module(module)
@@ -266,17 +273,10 @@ async def import_excel(
 
     if not file.filename or not file.filename.lower().endswith(".xlsx"):
         raise HTTPException(400, "只允许上传 .xlsx 文件")
-    content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(413, "导入文件不能超过 10MB")
-    import openpyxl
-    try:
-        wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
-    except Exception:
-        raise HTTPException(400, "无法读取文件，请上传 .xlsx 格式")
-
-    ws = wb.active
-    all_rows = list(ws.iter_rows(values_only=True))
+    content = file.file.read(MAX_UPLOAD + 1)
+    if len(content) > MAX_UPLOAD:
+        raise HTTPException(413, '导入文件不能超过10MB')
+    all_rows = read_rows(content)
     if len(all_rows) < 2:
         return {"imported": 0, "skipped": 0, "message": "文件中没有数据行"}
 
@@ -315,12 +315,16 @@ async def import_excel(
             errors.append(f"第{row_idx}行：缺少必填字段 {','.join(missing)}")
             continue
 
-        # 日期/数字类型转换
-        for cn_name, field_name, _ in cfg["fields"]:
-            if field_name in ("purchase_date", "warranty_expiry", "calibration_expiry", "expiry_date"):
-                data[field_name] = _parse_date(data.get(field_name))
-            elif field_name == "price" or field_name == "use_years":
-                data[field_name] = _parse_float(data.get(field_name))
+        try:
+            for cn_name, field_name, _ in cfg['fields']:
+                if field_name in ('purchase_date', 'calibration_expiry', 'expiry_date') or (field_name == 'warranty_expiry' and module != 'medical'):
+                    data[field_name] = _parse_date(data.get(field_name))
+                elif field_name in ('price', 'use_years'):
+                    data[field_name] = _parse_float(data.get(field_name))
+        except ValueError as error:
+            skipped += 1
+            errors.append(f'第{row_idx}行：{cn_name}，{error}')
+            continue
 
         # 去重检查
         unique_fields = {
@@ -375,7 +379,7 @@ async def import_excel(
             imported += 1
         except Exception as e:
             skipped += 1
-            errors.append(f"第{row_idx}行：{str(e)[:100]}")
+            errors.append(f"第{row_idx}行：数据不符合格式或存在重复记录")
 
     try:
         db.commit()

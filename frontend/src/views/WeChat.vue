@@ -14,7 +14,7 @@
     <tbody>
       <tr v-for="item in list" :key="item.id">
         <td>{{ item.wx_account }}</td>
-        <td>{{ item.wx_password }}</td>
+        <td><span v-if="item.password_error" style="color:#b45309">{{ item.password_error }}</span><span v-else>{{ item.wx_password }}</span></td>
         <td>{{ item.real_name }}</td>
         <td>{{ item.user_name }}</td>
         <td>{{ item.purpose }}</td>

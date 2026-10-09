@@ -15,8 +15,10 @@ import { getBaseURL } from '../api'
 const props = defineProps({ module: { type: String, required: true } })
 const fileInput = ref(null)
 const currentUser = ref({ permissions: [] })
-const canExport = computed(() => currentUser.value.permissions?.includes('export'))
-const canImport = computed(() => currentUser.value.permissions?.includes('import') && ((currentUser.value.data_scope === 'all') || !['wechat', 'department'].includes(props.module)) && (props.module !== 'wechat' || currentUser.value.permissions?.includes('wechat_secret')))
+const modulePermission = computed(() => props.module === 'department' ? 'departments' : props.module === 'wechat' ? 'wechat' : 'assets')
+const canUseModule = computed(() => currentUser.value.permissions?.includes(modulePermission.value) && (!['wechat', 'department'].includes(props.module) || currentUser.value.role === 'super_admin' || currentUser.value.data_scope === 'all'))
+const canExport = computed(() => canUseModule.value && currentUser.value.permissions?.includes('export'))
+const canImport = computed(() => canUseModule.value && currentUser.value.permissions?.includes('import') && ((currentUser.value.data_scope === 'all') || !['wechat', 'department'].includes(props.module)) && (props.module !== 'wechat' || currentUser.value.permissions?.includes('wechat_secret')))
 onMounted(async () => {
   try { currentUser.value = (await api.get('/auth/me')).data } catch {}
 })
