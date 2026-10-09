@@ -43,6 +43,10 @@ def list_scraps(db: Session = Depends(get_db), current_user: User = Depends(get_
 @router.post("")
 def create_scrap(data: ScrapIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("scrap"))):
     data.submit_date = date.today()
+    data.applicant = current_user.name
+    data.department = current_user.department
+    data.status = "pending_approval"
+    data.auditor = None
     item = ScrapRequest(**data.dict())
     db.add(item)
     db.add(OperationLog(user=current_user.name, module="报废管理", action="发起申请", detail=data.asset_desc))
@@ -57,24 +61,28 @@ def approve_scrap(item_id: int, db: Session = Depends(get_db), current_user: Use
         raise HTTPException(404, "申请不存在")
     if item.status != "pending_approval":
         raise HTTPException(400, f"申请已{ '审批通过' if item.status=='approved' else '已驳回' }，请勿重复操作")
+    if item.applicant == current_user.name:
+        raise HTTPException(400, "不能审批自己提交的申请")
+    if not item.asset_type or not item.asset_id or item.asset_type not in ASSET_MAP:
+        raise HTTPException(400, "申请缺少有效的资产信息")
+    asset = db.query(ASSET_MAP[item.asset_type]).get(item.asset_id)
+    if not asset:
+        raise HTTPException(404, "申请对应的资产不存在")
+    if asset.status == "scrapped":
+        raise HTTPException(400, "资产已经报废")
     item.status = "approved"
     item.approve_date = date.today()
     item.auditor = current_user.name
     # 更新设备状态为已报废
-    if item.asset_type and item.asset_id:
-        model = ASSET_MAP.get(item.asset_type)
-        if model:
-            asset = db.query(model).get(item.asset_id)
-            if asset:
-                asset.status = "scrapped"
-                set_asset_user(asset, None)
-                asset.department = None
-                tr = TransferRecord(
-                    transfer_number='TR-SCRAP-' + str(item.id),
-                    type='scrap', asset_desc=item.asset_desc,
-                    operator=current_user.name, department=item.department, notes='报废审批通过'
-                )
-                db.add(tr)
+    asset.status = "scrapped"
+    set_asset_user(asset, None)
+    asset.department = None
+    tr = TransferRecord(
+        transfer_number='TR-SCRAP-' + str(item.id),
+        type='scrap', asset_desc=item.asset_desc,
+        operator=current_user.name, department=item.department, notes='报废审批通过'
+    )
+    db.add(tr)
     db.add(OperationLog(user=current_user.name, module="报废管理", action="审批通过", detail=item.asset_desc))
     db.commit()
     return item
@@ -86,6 +94,8 @@ def reject_scrap(item_id: int, db: Session = Depends(get_db), current_user: User
         raise HTTPException(404, "申请不存在")
     if item.status != "pending_approval":
         raise HTTPException(400, "申请已处理，请勿重复操作")
+    if item.applicant == current_user.name:
+        raise HTTPException(400, "不能审批自己提交的申请")
     item.status = "rejected"
     db.add(OperationLog(user=current_user.name, module="报废管理", action="审批驳回", detail=item.asset_desc))
     db.commit()

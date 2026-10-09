@@ -83,8 +83,6 @@ def index():
 
 @app.get("/{full_path:path}")
 def spa(full_path: str):
-    f = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", full_path)
-    if os.path.exists(f) and os.path.isfile(f): return FileResponse(f)
     idx = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "index.html")
     if os.path.exists(idx): return FileResponse(idx)
     return {"status": "ok"}

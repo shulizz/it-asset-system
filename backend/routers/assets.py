@@ -49,10 +49,11 @@ def update_it(item_id: int, data: ITAssetIn, db: Session = Depends(get_db), curr
     item = db.query(ITAsset).get(item_id)
     if not item:
         raise HTTPException(404, "设备不存在")
+    if item.status == "scrapped":
+        raise HTTPException(400, "已报废设备不能直接编辑，如需恢复请走审批流程")
     if db.query(ITAsset).filter(ITAsset.asset_number == data.asset_number, ITAsset.id != item_id).first():
         raise HTTPException(400, f"资产编号 {data.asset_number} 已存在，不能重复")
-    if item.status != "scrapped":
-        data.status = "in_use" if data.user_name else "idle"
+    data.status = "in_use" if data.user_name else "idle"
     for k, v in data.dict().items():
         setattr(item, k, v)
     db.add(OperationLog(user=current_user.name, module="IT设备", action="编辑", detail=f"编辑设备 {item.asset_number}"))
@@ -93,10 +94,11 @@ def update_phone(item_id: int, data: PhoneAssetIn, db: Session = Depends(get_db)
     item = db.query(PhoneAsset).get(item_id)
     if not item:
         raise HTTPException(404, "设备不存在")
+    if item.status == "scrapped":
+        raise HTTPException(400, "已报废设备不能直接编辑，如需恢复请走审批流程")
     if db.query(PhoneAsset).filter(PhoneAsset.asset_number == data.asset_number, PhoneAsset.id != item_id).first():
         raise HTTPException(400, f"资产编号 {data.asset_number} 已存在")
-    if item.status != "scrapped":
-        data.status = "in_use" if data.user_name else "idle"
+    data.status = "in_use" if data.user_name else "idle"
     for k, v in data.dict().items():
         setattr(item, k, v)
     db.add(OperationLog(user=current_user.name, module="手机设备", action="编辑", detail=f"编辑手机 {item.asset_number}"))
@@ -140,10 +142,11 @@ def update_medical(item_id: int, data: MedicalAssetIn, db: Session = Depends(get
     item = db.query(MedicalAsset).get(item_id)
     if not item:
         raise HTTPException(404, "设备不存在")
+    if item.status == "scrapped":
+        raise HTTPException(400, "已报废设备不能直接编辑，如需恢复请走审批流程")
     if db.query(MedicalAsset).filter(MedicalAsset.asset_number == data.asset_number, MedicalAsset.id != item_id).first():
         raise HTTPException(400, f"资产编号 {data.asset_number} 已存在")
-    if item.status != "scrapped":
-        data.status = "in_use" if data.keeper else "idle"
+    data.status = "in_use" if data.keeper else "idle"
     for k, v in data.dict().items():
         setattr(item, k, v)
     db.add(OperationLog(user=current_user.name, module="医疗设备", action="编辑", detail=f"编辑医疗设备 {item.asset_number}"))

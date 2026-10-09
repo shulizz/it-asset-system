@@ -41,6 +41,7 @@ def list_requests(db: Session = Depends(get_db), current_user: User = Depends(ge
 
 @router.post("")
 def create_request(data: DeleteReqIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    data.applicant = current_user.name
     item = DeleteRequest(**data.dict())
     db.add(item)
     db.add(OperationLog(user=current_user.name, module="删除管理", action="申请删除", detail=f"{data.record_desc}，原因：{data.reason}"))
@@ -54,6 +55,8 @@ def approve_request(item_id: int, db: Session = Depends(get_db), current_user: U
         raise HTTPException(404, "申请不存在")
     if item.status != "pending":
         raise HTTPException(400, "申请已处理，请勿重复操作")
+    if item.applicant == current_user.name:
+        raise HTTPException(400, "不能审批自己提交的申请")
     item.status = "approved"
     item.approver = current_user.name
     item.approved_at = datetime.now()
@@ -145,6 +148,8 @@ def reject_request(item_id: int, db: Session = Depends(get_db), current_user: Us
         raise HTTPException(404, "申请不存在")
     if item.status != "pending":
         raise HTTPException(400, "申请已处理，请勿重复操作")
+    if item.applicant == current_user.name:
+        raise HTTPException(400, "不能审批自己提交的申请")
     item.status = "rejected"
     item.approver = current_user.name
     item.approved_at = datetime.now()
