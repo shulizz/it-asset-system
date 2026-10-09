@@ -1,6 +1,6 @@
 ﻿<template>
-  <div>
-    <h2 style="margin-bottom:20px">工作台</h2>
+  <div class="dashboard">
+    <div class="dashboard-heading"><div><h2>工作台</h2><p>查看资产状态，及时处理流转与审批事项。</p></div><span class="today">{{ new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) }}</span></div>
     <div class="stats">
       <div class="card"><div class="num">{{ stats.total }}</div><div class="label">设备总数</div></div>
       <div class="card"><div class="num" style="color:#16a34a">{{ stats.inUse }}</div><div class="label">在用</div></div>
@@ -8,7 +8,7 @@
       <div class="card"><div class="num" style="color:#ef4444">{{ pendingCount }}</div><div class="label">待审批</div></div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+    <div class="activity-grid">
       <div class="panel">
         <h3 style="margin-bottom:12px">待办事项</h3>
         <div v-if="pendingList.length === 0" style="color:#94a3b8;padding:20px 0;text-align:center">暂无待审批任务</div>
@@ -39,9 +39,9 @@
     </div>
 
     <div v-if="canSeeMedical" class="panel" style="margin-bottom:20px;border-left:4px solid #ef4444">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:12px">
         <h3 style="color:#dc2626">医疗设备到期提醒（30天内）</h3>
-        <button class="btn-outline" @click="sendEmail" :disabled="sending" style="font-size:12px;padding:6px 12px">
+        <button class="btn btn-outline" @click="sendEmail" :disabled="sending" style="font-size:12px;padding:6px 12px">
           {{ sending ? '发送中...' : '发送提醒邮件' }}
         </button>
       </div>
@@ -61,7 +61,7 @@
 
     <div class="panel">
       <h3 style="margin-bottom:12px">各模块摘要</h3>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+      <div class="module-grid">
         <div class="mini-stat"><div class="num-sm">{{ phoneCount }}</div><div class="label-sm">手机设备</div></div>
         <div class="mini-stat"><div class="num-sm">{{ medicalCount }}</div><div class="label-sm">医疗设备</div></div>
         <div class="mini-stat"><div class="num-sm">{{ numberCount }}</div><div class="label-sm">电话号码</div></div>
@@ -77,7 +77,7 @@ import { ref, onMounted, computed } from 'vue'
 import api from '../api'
 
 const user = computed(() => JSON.parse(localStorage.getItem('user') || '{}'))
-const role = computed(() => user.value.role || '')
+const perms = computed(() => user.value.permissions || [])
 const canSeeMedical = computed(() => perms.value.includes('assets'))
 
 const stats = ref({ total: 0, inUse: 0, idle: 0 })
@@ -168,18 +168,15 @@ function typeBadge(t){ return {checkout:'green',return:'blue',transfer:'amber',o
 </script>
 
 <style scoped>
-.stats { display: grid; grid-template-columns: repeat(4,1fr); gap:16px; margin-bottom:20px; }
-.card { background:#fff; border-radius:10px; padding:20px; border:1px solid #e2e8f0; }
-.num { font-size:28px; font-weight:700; }
-.label { font-size:12px; color:#94a3b8; margin-top:4px; }
-.panel { background:#fff; border-radius:10px; padding:20px; border:1px solid #e2e8f0; }
-.todo-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #f1f5f9; }
-.todo-item:last-child { border-bottom:none; }
-.mini-stat { background:#f8fafc; border-radius:8px; padding:14px; text-align:center; }
-.num-sm { font-size:22px; font-weight:700; color:#334155; }
-.label-sm { font-size:12px; color:#94a3b8; margin-top:4px; }
-.badge { padding:2px 8px; border-radius:4px; font-size:12px; }
-.green { background:#dcfce7; color:#16a34a; }.blue { background:#dbeafe; color:#2563eb; }.amber { background:#fef3c7; color:#d97706; }.red { background:#fee2e2; color:#dc2626; }.gray { background:#f1f5f9; color:#64748b; }
-.btn-outline { background:#fff; border:1px solid #e2e8f0; border-radius:6px; cursor:pointer; }
+.dashboard-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:22px; }.dashboard-heading h2 { font-size:22px; font-weight:650; }.dashboard-heading p { color:#728198; font-size:13px; margin-top:7px; }.today { color:#64748b; font-size:12px; white-space:nowrap; }
+.stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin-bottom:20px; }
+.card { position:relative; background:#fff; border-radius:8px; padding:20px 22px; border:1px solid var(--line); display:flex; flex-direction:column-reverse; gap:12px; }.card:first-child { border-left:3px solid #3478f6; }.card:nth-child(2) { border-left:3px solid #16a34a; }.card:nth-child(3) { border-left:3px solid #d97706; }.card:nth-child(4) { border-left:3px solid #ef4444; }
+.num { font-size:30px; font-weight:650; line-height:1; font-variant-numeric:tabular-nums; color:#253751; }.label { font-size:13px; color:#64748b; }
+.activity-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+.panel { background:#fff; border-radius:8px; padding:20px; border:1px solid var(--line); min-width:0; }.panel h3 { font-size:15px; font-weight:600; }.todo-item { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:12px 0; border-bottom:1px solid #edf1f6; }.todo-item:last-child { border-bottom:none; }.todo-item>div { min-width:0; overflow-wrap:anywhere; }
+.module-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; }.mini-stat { background:#f5f8fc; border:1px solid #edf1f6; border-radius:6px; padding:16px; text-align:left; }.num-sm { font-size:23px; font-weight:650; color:#253751; font-variant-numeric:tabular-nums; }.label-sm { font-size:12px; color:#64748b; margin-top:6px; }
+.badge { padding:3px 8px; border-radius:4px; font-size:12px; white-space:nowrap; }.green { background:#e8f6ee; color:#16834a; }.blue { background:#eaf1ff; color:#2865db; }.amber { background:#fff4df; color:#a76a13; }.red { background:#ffeded; color:#ce3e3e; }.gray { background:#f1f5f9; color:#64748b; }
+@media(max-width:1000px) { .module-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media(max-width:760px) { .stats { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }.activity-grid { grid-template-columns:1fr; }.dashboard-heading { align-items:flex-start; }.today { display:none; }.card { padding:16px; }.module-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.panel { padding:16px; } }
 </style>
 
