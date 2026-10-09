@@ -5,8 +5,11 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User, Role
 import json
+import os
 
-SECRET_KEY = "it-asset-secret-key-change-in-production"
+SECRET_KEY = os.getenv("IT_ASSET_SECRET_KEY")
+if not SECRET_KEY or SECRET_KEY == "it-asset-secret-key-change-in-production":
+    raise RuntimeError("IT_ASSET_SECRET_KEY must be configured with a strong secret")
 ALGORITHM = "HS256"
 
 security = HTTPBearer()

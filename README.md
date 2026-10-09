@@ -29,9 +29,14 @@
 
 ### 后端
 ```bash
+set IT_ASSET_SECRET_KEY=请设置高强度随机密钥
+set IT_ASSET_BOOTSTRAP_PASSWORD=首次部署时的管理员密码
 pip install -r requirements.txt
 python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+
+`IT_ASSET_SECRET_KEY` 是必填项。只有数据库尚无用户时才需要
+`IT_ASSET_BOOTSTRAP_PASSWORD`，首次管理员创建完成后应删除该环境变量。
 
 ### 前端开发
 ```bash
@@ -45,11 +50,6 @@ npm run dev
 npm run build
 # 然后将 dist/ 内容拷贝到 Electron 运行时 resources/app/
 ```
-
-## 默认账号
-
-- 用户名：`admin`
-- 密码：`admin123`
 
 ## 截图
 

@@ -8,8 +8,9 @@ from typing import Optional, List
 from database import get_db
 from models import (
     ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, WeChatAccount,
-    Department, OperationLog
+    Department, OperationLog, User
 )
+from deps import get_current_user, get_user_permissions
 
 router = APIRouter(prefix="/api/ie", tags=["导入导出"])
 
@@ -123,6 +124,12 @@ def _get_module(name: str):
     return MODULES[name]
 
 
+def _authorize_module(module: str, user: User, db: Session):
+    required = "departments" if module == "department" else "assets"
+    if required not in get_user_permissions(user, db):
+        raise HTTPException(403, f"没有「{required}」权限")
+
+
 def _gen_asset_number(db, model, prefix):
     year = date.today().year
     count = db.query(model).filter(model.asset_number.like(f"{prefix}-{year}-%")).count()
@@ -155,8 +162,13 @@ def _parse_float(val):
 
 
 @router.get("/{module}/export")
-def export_excel(module: str, db: Session = Depends(get_db)):
+def export_excel(
+    module: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     cfg = _get_module(module)
+    _authorize_module(module, current_user, db)
     model = cfg["model"]
     rows = db.query(model).all()
 
@@ -167,12 +179,16 @@ def export_excel(module: str, db: Session = Depends(get_db)):
     ws.title = cfg["label"]
 
     # 表头
-    headers = [f[0] for f in cfg["fields"]]
+    export_fields = [
+        field for field in cfg["fields"]
+        if not (module == "wechat" and field[1] == "wx_password")
+    ]
+    headers = [f[0] for f in export_fields]
     ws.append(headers)
 
     for row in rows:
         line = []
-        for cn_name, field_name, _ in cfg["fields"]:
+        for cn_name, field_name, _ in export_fields:
             v = getattr(row, field_name, None)
             if isinstance(v, date):
                 v = v.strftime("%Y-%m-%d")
@@ -191,8 +207,13 @@ def export_excel(module: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{module}/template")
-def download_template(module: str):
+def download_template(
+    module: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     cfg = _get_module(module)
+    _authorize_module(module, current_user, db)
     from urllib.parse import quote
     import openpyxl
     wb = openpyxl.Workbook()
@@ -227,11 +248,21 @@ def download_template(module: str):
 
 
 @router.post("/{module}/import")
-async def import_excel(module: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def import_excel(
+    module: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     cfg = _get_module(module)
+    _authorize_module(module, current_user, db)
     model = cfg["model"]
 
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(400, "只允许上传 .xlsx 文件")
     content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(413, "导入文件不能超过 10MB")
     import openpyxl
     try:
         wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
@@ -313,7 +344,7 @@ async def import_excel(module: str, file: UploadFile = File(...), db: Session = 
         try:
             item = model(**clean_data)
             db.add(item)
-            db.add(OperationLog(user="admin", module=cfg["label"], action="导入", detail=f"导入数据: {clean_data.get('asset_number') or clean_data.get('number') or clean_data.get('wx_account') or clean_data.get('name')}"))
+            db.add(OperationLog(user=current_user.name, module=cfg["label"], action="导入", detail=f"导入数据: {clean_data.get('asset_number') or clean_data.get('number') or clean_data.get('wx_account') or clean_data.get('name')}"))
             imported += 1
         except Exception as e:
             skipped += 1

@@ -5,7 +5,7 @@ from datetime import date
 from typing import Optional
 from database import get_db
 from models import ScrapRequest, OperationLog, ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, TransferRecord, User
-from deps import require_admin, get_current_user, require_approver
+from deps import require_admin, get_current_user, require_approver, require_perm
 
 router = APIRouter(prefix="/api/scrap", tags=["scrap"])
 
@@ -37,11 +37,11 @@ class ScrapIn(BaseModel):
     notes: Optional[str] = None
 
 @router.get("")
-def list_scraps(db: Session = Depends(get_db)):
+def list_scraps(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(ScrapRequest).order_by(ScrapRequest.id.desc()).all()
 
 @router.post("")
-def create_scrap(data: ScrapIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_scrap(data: ScrapIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("scrap"))):
     data.submit_date = date.today()
     item = ScrapRequest(**data.dict())
     db.add(item)

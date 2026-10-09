@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 from database import get_db
 from models import DeleteRequest, OperationLog, ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, ScrapRequest, TransferRecord, User
-from deps import require_admin, get_current_user, require_approver
+from deps import require_admin, get_current_user, require_approver, get_user_permissions
 
 router = APIRouter(prefix="/api/delete-request", tags=["delete-request"])
 
@@ -33,8 +33,11 @@ class DeleteReqIn(BaseModel):
     applicant: Optional[str] = "管理员"
 
 @router.get("")
-def list_requests(db: Session = Depends(get_db)):
-    return db.query(DeleteRequest).order_by(DeleteRequest.id.desc()).all()
+def list_requests(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    query = db.query(DeleteRequest)
+    if "approval" not in get_user_permissions(current_user, db):
+        query = query.filter(DeleteRequest.applicant == current_user.name)
+    return query.order_by(DeleteRequest.id.desc()).all()
 
 @router.post("")
 def create_request(data: DeleteReqIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

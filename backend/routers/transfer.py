@@ -5,7 +5,7 @@ from datetime import date
 from typing import Optional
 from database import get_db
 from models import TransferRecord, OperationLog, ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, User
-from deps import get_current_user
+from deps import get_current_user, require_perm
 
 router = APIRouter(prefix="/api/transfer", tags=["transfer"])
 
@@ -33,11 +33,11 @@ class TransferIn(BaseModel):
     new_dept: Optional[str] = None
 
 @router.get("")
-def list_transfers(db: Session = Depends(get_db)):
+def list_transfers(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(TransferRecord).order_by(TransferRecord.id.desc()).all()
 
 @router.post("")
-def create_transfer(data: TransferIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_transfer(data: TransferIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("transfer"))):
     item = TransferRecord(**data.dict(exclude={'new_user','new_dept'}))
     db.add(item)
     db.add(OperationLog(user=current_user.name, module="设备流转", action=data.type, detail=data.asset_desc))

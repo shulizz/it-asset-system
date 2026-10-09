@@ -45,10 +45,16 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 @app.on_event("startup")
 def seed_admin():
     db = SessionLocal()
-    if not db.query(User).filter(User.username == "admin").first():
+    if not db.query(User).first():
+        bootstrap_password = os.getenv("IT_ASSET_BOOTSTRAP_PASSWORD")
+        if not bootstrap_password:
+            db.close()
+            raise RuntimeError(
+                "IT_ASSET_BOOTSTRAP_PASSWORD must be set when creating the first user"
+            )
         admin = User(
-            username="admin",
-            password_hash=pwd_context.hash("admin123"),
+            username=os.getenv("IT_ASSET_BOOTSTRAP_USERNAME", "admin"),
+            password_hash=pwd_context.hash(bootstrap_password),
             name="管理员",
             role="super_admin",
             department="IT部",

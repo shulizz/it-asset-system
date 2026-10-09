@@ -5,7 +5,7 @@ from datetime import date
 from typing import Optional
 from database import get_db
 from models import ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, OperationLog, User
-from deps import get_current_user
+from deps import get_current_user, require_perm
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
 
@@ -29,11 +29,11 @@ def gen_number(db, model, prefix):
     return f"{prefix}-{year}-{count+1:03d}"
 
 @router.get("/it")
-def list_it(db: Session = Depends(get_db)):
+def list_it(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(ITAsset).all()
 
 @router.post("/it")
-def create_it(data: ITAssetIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_it(data: ITAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
     number = data.asset_number or gen_number(db, ITAsset, "IT")
     if data.user_name:
         data.status = "in_use"
@@ -45,7 +45,7 @@ def create_it(data: ITAssetIn, db: Session = Depends(get_db), current_user: User
     return item
 
 @router.put("/it/{item_id}")
-def update_it(item_id: int, data: ITAssetIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_it(item_id: int, data: ITAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
     item = db.query(ITAsset).get(item_id)
     if not item:
         raise HTTPException(404, "设备不存在")
@@ -73,11 +73,11 @@ class PhoneAssetIn(BaseModel):
     notes: Optional[str] = None
 
 @router.get("/phone")
-def list_phone(db: Session = Depends(get_db)):
+def list_phone(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(PhoneAsset).all()
 
 @router.post("/phone")
-def create_phone(data: PhoneAssetIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_phone(data: PhoneAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
     number = data.asset_number or gen_number(db, PhoneAsset, "PH")
     if data.user_name:
         data.status = "in_use"
@@ -89,7 +89,7 @@ def create_phone(data: PhoneAssetIn, db: Session = Depends(get_db), current_user
     return item
 
 @router.put("/phone/{item_id}")
-def update_phone(item_id: int, data: PhoneAssetIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_phone(item_id: int, data: PhoneAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
     item = db.query(PhoneAsset).get(item_id)
     if not item:
         raise HTTPException(404, "设备不存在")
@@ -120,11 +120,11 @@ class MedicalAssetIn(BaseModel):
     notes: Optional[str] = None
 
 @router.get("/medical")
-def list_medical(db: Session = Depends(get_db)):
+def list_medical(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(MedicalAsset).all()
 
 @router.post("/medical")
-def create_medical(data: MedicalAssetIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_medical(data: MedicalAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
     number = data.asset_number or gen_number(db, MedicalAsset, "MED")
     if data.keeper:
         data.status = "in_use"
@@ -136,7 +136,7 @@ def create_medical(data: MedicalAssetIn, db: Session = Depends(get_db), current_
     return item
 
 @router.put("/medical/{item_id}")
-def update_medical(item_id: int, data: MedicalAssetIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_medical(item_id: int, data: MedicalAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
     item = db.query(MedicalAsset).get(item_id)
     if not item:
         raise HTTPException(404, "设备不存在")
@@ -164,11 +164,11 @@ class PhoneNumberIn(BaseModel):
     notes: Optional[str] = None
 
 @router.get("/numbers")
-def list_numbers(db: Session = Depends(get_db)):
+def list_numbers(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(PhoneNumber).all()
 
 @router.post("/numbers")
-def create_number(data: PhoneNumberIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_number(data: PhoneNumberIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
     if db.query(PhoneNumber).filter(PhoneNumber.number == data.number).first():
         raise HTTPException(400, f"号码 {data.number} 已存在")
     data.status = "in_use" if data.user_name else "idle"
@@ -180,7 +180,7 @@ def create_number(data: PhoneNumberIn, db: Session = Depends(get_db), current_us
     return item
 
 @router.put("/numbers/{item_id}")
-def update_number(item_id: int, data: PhoneNumberIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_number(item_id: int, data: PhoneNumberIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
     item = db.query(PhoneNumber).get(item_id)
     if not item:
         raise HTTPException(404, "号码不存在")
@@ -201,7 +201,7 @@ def list_expiring(days: int = 30, db: Session = Depends(get_db), current_user: U
     return get_expiring_medical(db, days)
 
 @router.post("/medical/send-expiry-email")
-def send_expiry_email(days: int = 30, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def send_expiry_email(days: int = 30, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
     from notifier import send_expiry_notice
     result = send_expiry_notice(db, days)
     db.add(OperationLog(user=current_user.name, module="邮件提醒", action="发送到期提醒",

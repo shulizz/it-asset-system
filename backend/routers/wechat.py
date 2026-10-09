@@ -4,9 +4,13 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from database import get_db
 from models import WeChatAccount, OperationLog, User
-from deps import get_current_user
+from deps import get_current_user, require_perm
 
-router = APIRouter(prefix="/api/wechat", tags=["微信账号"])
+router = APIRouter(
+    prefix="/api/wechat",
+    tags=["微信账号"],
+    dependencies=[Depends(require_perm("assets"))],
+)
 
 class WeChatIn(BaseModel):
     wx_account: str
