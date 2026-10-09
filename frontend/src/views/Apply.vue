@@ -70,7 +70,7 @@
 import { ref, onMounted } from 'vue'
 import api from '../api'
 const list = ref([]), showForm = ref(false), deptList = ref([])
-const form = ref({ type:'checkout', assetType:'', deptFilter:'', assetId:null, content:'', user_name:'', department:'' })
+const form = ref({ type:'scrap', assetType:'', deptFilter:'', assetId:null, content:'', user_name:'', department:'' })
 const assetList = ref([])
 async function loadAssets(){
   if (!form.value.assetType) { assetList.value = []; return }
@@ -88,7 +88,8 @@ function onAssetSelect(){
 async function load(){
   // 从删除审批表借用，用类型区分
   const res = await api.get('/delete-request')
-  list.value = res.data.filter(r => r.table_name === 'apply_requests')
+  const scraps = await api.get('/scrap')
+  list.value = [...res.data.filter(r => r.table_name === 'apply_requests'), ...scraps.data.map(r => ({...r, record_desc:r.asset_desc, type:'scrap', status:r.status === 'pending_approval' ? 'pending' : r.status}))]
 }
 async function save(){
   if (!form.value.content) { alert('请填写申请说明'); return }
@@ -116,7 +117,7 @@ async function save(){
   }
   } catch(e) { alert('提交失败: ' + (typeof e.response?.data?.detail === 'string' ? e.response.data.detail : JSON.stringify(e.response?.data || e.message))); return }
   showForm.value = false
-  form.value = { type:'checkout', assetType:'', deptFilter:'', assetId:null, content:'', user_name:'', department:'' }
+  form.value = { type:'scrap', assetType:'', deptFilter:'', assetId:null, content:'', user_name:'', department:'' }
   load()
 }
 function typeClass(t){ return {checkout:'blue',new_asset:'green',transfer:'amber',scrap:'red'}[t]||'gray' }

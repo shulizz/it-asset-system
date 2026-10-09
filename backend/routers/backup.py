@@ -1,6 +1,6 @@
-import os, shutil, glob
+import os, sqlite3, glob, re
 from datetime import datetime
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from deps import require_super_admin
 
@@ -13,7 +13,10 @@ os.makedirs(BACKUP_DIR, exist_ok=True)
 def do_backup():
     name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
     path = os.path.join(BACKUP_DIR, name)
-    shutil.copy2(DB_PATH, path)
+    with sqlite3.connect(DB_PATH) as source, sqlite3.connect(path) as target:
+        source.backup(target)
+        if target.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
+            raise RuntimeError('备份完整性检查失败')
     # 只保留最近20个备份
     files = sorted(glob.glob(os.path.join(BACKUP_DIR, "backup_*.db")))
     for f in files[:-20]:
@@ -32,5 +35,9 @@ def list_backups(user = Depends(require_super_admin)):
 
 @router.get("/download/{name}")
 def download(name: str, user = Depends(require_super_admin)):
+    if not re.fullmatch(r'backup_\d{8}_\d{6}\.db', name):
+        raise HTTPException(400, '无效备份文件名')
     path = os.path.join(BACKUP_DIR, name)
+    if not os.path.isfile(path):
+        raise HTTPException(404, '备份不存在')
     return FileResponse(path, filename=name)

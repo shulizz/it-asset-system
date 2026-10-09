@@ -1,17 +1,19 @@
 ﻿<template>
   <div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h2>用户管理</h2>
+      <h2>用户权限</h2>
       <button class="btn-primary" @click="openForm">+ 新增用户</button>
     </div>
     <div class="panel">
       <table>
-        <thead><tr><th>用户名</th><th>姓名</th><th>角色</th><th>部门</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>用户名</th><th>姓名</th><th>角色</th><th>部门</th><th>数据范围</th><th>已分配权限</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="u in list" :key="u.id">
             <td>{{ u.username }}</td><td>{{ u.name }}</td>
             <td><span class="badge" :class="roleClass(u.role)">{{ roleText(u.role) }}</span></td>
             <td>{{ u.department || '—' }}</td>
+            <td>{{ u.role === "super_admin" || u.data_scope === "all" ? "全部部门" : "仅本部门" }}</td>
+            <td>{{ u.role === "super_admin" ? "全部权限" : (u.permissions || []).map(key => permissionList.find(p => p.key === key)?.label || key).join("、") || "无" }}</td>
             <td><span class="badge" :class="u.is_active ? 'green' : 'gray'">{{ u.is_active ? '启用' : '停用' }}</span></td>
             <td>
               <a @click="edit(u)" style="color:#0d9488;cursor:pointer;margin-right:10px">编辑</a>
@@ -45,9 +47,10 @@
         <h3>{{ form.id ? '编辑用户' : '新增用户' }}</h3>
         <div class="form-row"><label>用户名</label><input v-model="form.username" :disabled="form.id"></div>
         <div class="form-row"><label>姓名</label><input v-model="form.name"></div>
-        <div class="form-row"><label>密码</label><input v-model="form.password" type="password" :placeholder="form.id ? '不修改请留空' : '默认123456'"></div>
+        <div class="form-row"><label>密码</label><input v-model="form.password" type="password" :placeholder="form.id ? '不修改请留空' : '至少10个字符'"></div>
         <div class="form-row"><label>角色</label>
-          <select v-model="form.role">
+          <select v-model="form.role" @change="applyRoleTemplate">
+            <option value="">无角色模板（单独配置）</option>
             <option value="super_admin">超级管理员</option>
             <option v-for="r in roleList" :value="r.name">{{ r.name }}</option>
           </select>
@@ -58,6 +61,20 @@
             <option v-for="d in deptList" :value="d.name">{{ d.name }}</option>
           </select>
         </div>
+        <div class="form-row"><label>数据范围</label>
+          <select v-model="form.data_scope" :disabled="form.role === 'super_admin'">
+            <option value="department">仅本部门</option><option value="all">全部部门</option>
+          </select>
+        </div>
+        <div class="form-row"><label>用户操作权限（可单独调整）</label>
+          <p v-if="form.role === 'super_admin'">超级管理员拥有全部权限。</p>
+          <div v-else style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label v-for="p in permissionList" :key="p.key" style="display:flex;gap:6px;align-items:center">
+              <input type="checkbox" :value="p.key" v-model="form.permissions" style="width:16px;height:16px">{{ p.label }}
+            </label>
+          </div>
+        </div>
+        <p v-if="formError" style="color:#dc2626">{{ formError }}</p>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
           <button class="btn-outline" @click="showForm = false">取消</button>
           <button class="btn-primary" @click="save">保存</button>
@@ -70,29 +87,35 @@
 import { ref, onMounted } from 'vue'
 import api from '../api'
 const list = ref([]), showForm = ref(false), deptList = ref([]), backups = ref([]), roleList = ref([])
+const permissionList = ref([]), formError = ref('')
 const form = ref({ id:null, username:'', name:'', password:'', role:'', department:'' })
 async function load(){
-  const [u, d, b, r] = await Promise.all([api.get('/auth/users'), api.get('/departments'), api.get('/backup/list'), api.get('/auth/roles')])
+  const [u, d, b, r, p] = await Promise.all([api.get('/auth/users'), api.get('/departments'), api.get('/backup/list'), api.get('/auth/roles'), api.get('/auth/permissions')])
   list.value = u.data
   deptList.value = d.data
   backups.value = b.data
   roleList.value = r.data
+  permissionList.value = p.data
 }
 async function backupNow(){
   await api.post('/backup/')
   await load()
 }
-function download(name){
-  const token = localStorage.getItem('token')
-  window.open(`/api/backup/download/${name}?token=${token}`)
+async function download(name){
+  const res = await api.get(`/backup/download/${encodeURIComponent(name)}`, { responseType: 'blob' })
+  const url = URL.createObjectURL(res.data), a = document.createElement('a')
+  a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
-function openForm(){ form.value = { id:null, username:'', name:'', password:'', role:'asset_admin', department:'' }; showForm.value = true }
-function edit(u){ Object.assign(form.value, u, {password:''}); showForm.value = true }
+function openForm(){ formError.value = ''; form.value = { id:null, username:'', name:'', password:'', role:'', department:'', permissions:[], data_scope:'department' }; showForm.value = true }
+function edit(u){ formError.value = ''; form.value = {...u, permissions:[...(u.permissions || [])], password:''}; showForm.value = true }
+function applyRoleTemplate(){ const role = roleList.value.find(r => r.name === form.value.role); form.value.permissions = [...(role?.permissions || [])] }
 async function save(){
+  formError.value = ''; try {
   if (form.value.id) await api.put(`/auth/users/${form.value.id}`, form.value)
   else await api.post('/auth/users', form.value)
   showForm.value = false
   load()
+  } catch(e) { formError.value = e.response?.data?.detail || '保存失败' }
 }
 async function toggle(u){ await api.put(`/auth/users/${u.id}/toggle`); load() }
 async function del(u){
@@ -114,7 +137,7 @@ td{padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:13px}
 .btn-primary{background:#2563eb;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px}
 .btn-outline{background:#fff;border:1px solid #e2e8f0;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px}
 .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:100}
-.modal{background:#fff;border-radius:12px;padding:24px;width:420px}
+.modal{background:#fff;border-radius:12px;padding:24px;width:640px;max-height:90vh;overflow-y:auto}
 .modal h3{margin-bottom:16px}
 .form-row{margin-bottom:12px}
 .form-row label{display:block;font-size:13px;color:#64748b;margin-bottom:4px}

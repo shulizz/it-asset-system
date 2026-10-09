@@ -4,8 +4,8 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 from database import get_db
-from models import DeleteRequest, OperationLog, ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, ScrapRequest, TransferRecord, User
-from deps import require_admin, get_current_user, require_approver, get_user_permissions
+from models import DeleteRequest, OperationLog, ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, ScrapRequest, TransferRecord, User, Department
+from deps import require_admin, get_current_user, require_approver, get_user_permissions, require_any, check_scope
 
 router = APIRouter(prefix="/api/delete-request", tags=["delete-request"])
 
@@ -25,6 +25,22 @@ def set_asset_user(asset, value):
     elif hasattr(asset, 'keeper'):
         asset.keeper = value
 
+def request_in_scope(item, user, db):
+    if user.role == 'super_admin' or user.data_scope == 'all' or item.applicant == user.name:
+        return True
+    if item.table_name == 'apply_requests':
+        parts = (item.reason or '').split('|')
+        model = {'it': ITAsset, 'phone': PhoneAsset, 'medical': MedicalAsset}.get(parts[3]) if len(parts) > 4 else None
+        try:
+            asset_id = int(parts[4]) if len(parts) > 4 else 0
+        except (TypeError, ValueError):
+            return False
+        record = db.query(model).filter(model.id == asset_id).first() if model else None
+    else:
+        model = TABLE_MAP.get(item.table_name)
+        record = db.query(model).filter(model.id == item.record_id).first() if model else None
+    return bool(record and (getattr(record, 'department_id', None) == user.department_id or getattr(record, 'department', None) == user.department))
+
 class DeleteReqIn(BaseModel):
     table_name: str
     record_id: int
@@ -34,13 +50,47 @@ class DeleteReqIn(BaseModel):
 
 @router.get("")
 def list_requests(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    query = db.query(DeleteRequest)
+    rows = db.query(DeleteRequest).order_by(DeleteRequest.id.desc()).all()
     if "approval" not in get_user_permissions(current_user, db):
-        query = query.filter(DeleteRequest.applicant == current_user.name)
-    return query.order_by(DeleteRequest.id.desc()).all()
+        return [row for row in rows if row.applicant == current_user.name]
+    return [row for row in rows if request_in_scope(row, current_user, db)]
 
 @router.post("")
 def create_request(data: DeleteReqIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if data.table_name == 'apply_requests':
+        if 'apply' not in get_user_permissions(current_user, db):
+            raise HTTPException(403, '没有设备申请权限')
+        parts = (data.reason or '').split('|')
+        if len(parts) < 5 or parts[0] not in ('checkout', 'transfer', 'scrap'):
+            raise HTTPException(400, '申请内容无效')
+        model = {'it': ITAsset, 'phone': PhoneAsset, 'medical': MedicalAsset}.get(parts[3])
+        try:
+            asset_id = int(parts[4])
+        except (TypeError, ValueError):
+            raise HTTPException(400, '申请资产无效')
+        asset = db.query(model).filter(model.id == asset_id).first() if model else None
+        if not asset:
+            raise HTTPException(404, '申请资产不存在')
+        check_scope(asset, current_user)
+        target_department = parts[2].strip()
+        if target_department and not db.query(Department).filter(Department.name == target_department).first():
+            raise HTTPException(400, '申请目标部门不存在')
+        if current_user.role != 'super_admin' and current_user.data_scope != 'all' and target_department and target_department != current_user.department:
+            raise HTTPException(403, '不能向其他部门发起申请')
+        if parts[0] == 'checkout' and asset.status != 'idle':
+            raise HTTPException(400, '只有闲置资产可以申请领用')
+        if parts[0] in ('transfer', 'scrap') and asset.status == 'scrapped':
+            raise HTTPException(400, '已报废资产不能申请此操作')
+    else:
+        if data.table_name not in TABLE_MAP:
+            raise HTTPException(400, '不允许申请删除该类型记录')
+        if 'assets_write' not in get_user_permissions(current_user, db):
+            raise HTTPException(403, '没有申请删除权限')
+        model = TABLE_MAP[data.table_name]
+        record = db.query(model).filter(model.id == data.record_id).first()
+        if not record:
+            raise HTTPException(404, '记录不存在')
+        check_scope(record, current_user)
     data.applicant = current_user.name
     item = DeleteRequest(**data.dict())
     db.add(item)
@@ -57,6 +107,32 @@ def approve_request(item_id: int, db: Session = Depends(get_db), current_user: U
         raise HTTPException(400, "申请已处理，请勿重复操作")
     if item.applicant == current_user.name:
         raise HTTPException(400, "不能审批自己提交的申请")
+    if item.table_name not in TABLE_MAP and item.table_name != 'apply_requests':
+        raise HTTPException(400, '申请记录类型无效')
+
+    if item.table_name == 'apply_requests':
+        parts = (item.reason or '').split('|')
+        if len(parts) < 5:
+            raise HTTPException(400, '申请内容无效')
+        model = {'it': ITAsset, 'phone': PhoneAsset, 'medical': MedicalAsset}.get(parts[3])
+        try:
+            asset_id = int(parts[4])
+        except (TypeError, ValueError):
+            raise HTTPException(400, '申请资产无效')
+        asset = db.query(model).filter(model.id == asset_id).first() if model else None
+        if not asset:
+            raise HTTPException(404, '申请资产不存在')
+        if current_user.role != 'super_admin' and current_user.data_scope != 'all':
+            if not current_user.department or asset.department != current_user.department:
+                raise HTTPException(403, '只能审批本部门申请')
+            if parts[2].strip() and parts[2].strip() != current_user.department:
+                raise HTTPException(403, '不能审批调拨到其他部门的申请')
+    else:
+        model = TABLE_MAP[item.table_name]
+        record = db.query(model).filter(model.id == item.record_id).first()
+        if not record:
+            raise HTTPException(404, '申请对应的记录已不存在')
+        check_scope(record, current_user)
     item.status = "approved"
     item.approver = current_user.name
     item.approved_at = datetime.now()
@@ -79,7 +155,6 @@ def approve_request(item_id: int, db: Session = Depends(get_db), current_user: U
                 if asset:
                     asset.status = 'scrapped'
                     set_asset_user(asset, None)
-                    asset.department = None
             # 在报废管理里留记录
             sr = ScrapRequest(
                 request_number='SC-' + str(int(datetime.now().timestamp()*1000)),
@@ -125,9 +200,13 @@ def approve_request(item_id: int, db: Session = Depends(get_db), current_user: U
                     if apply_type == 'checkout':
                         asset.status = 'in_use'
                         set_asset_user(asset, apply_user or getattr(asset, 'user_name', None) or getattr(asset, 'keeper', None))
-                        if apply_dept: asset.department = apply_dept
+                        if apply_dept:
+                            target = db.query(Department).filter(Department.name == apply_dept).first()
+                            asset.department, asset.department_id = apply_dept, target.id if target else None
                     elif apply_type == 'transfer':
-                        if apply_dept: asset.department = apply_dept
+                        if apply_dept:
+                            target = db.query(Department).filter(Department.name == apply_dept).first()
+                            asset.department, asset.department_id = apply_dept, target.id if target else None
                         if apply_user: set_asset_user(asset, apply_user)
     else:
         # 普通删除申请 → 真正删除记录

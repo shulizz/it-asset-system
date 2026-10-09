@@ -10,7 +10,8 @@ from models import (
     ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, WeChatAccount,
     Department, OperationLog, User
 )
-from deps import get_current_user, get_user_permissions
+from deps import get_current_user, get_user_permissions, scope_query, check_scope
+from credential_crypto import encrypt_credential
 
 router = APIRouter(prefix="/api/ie", tags=["导入导出"])
 
@@ -124,10 +125,13 @@ def _get_module(name: str):
     return MODULES[name]
 
 
-def _authorize_module(module: str, user: User, db: Session):
-    required = "departments" if module == "department" else "assets"
-    if required not in get_user_permissions(user, db):
+def _authorize_module(module: str, user: User, db: Session, action="export"):
+    required = "departments" if module == "department" else "wechat" if module == "wechat" else "assets"
+    perms = get_user_permissions(user, db)
+    if required not in perms or action not in perms:
         raise HTTPException(403, f"没有「{required}」权限")
+    if module == "wechat" and action == "import" and "wechat_secret" not in perms:
+        raise HTTPException(403, "导入微信账号需要查看和修改微信密码权限")
 
 
 def _gen_asset_number(db, model, prefix):
@@ -170,7 +174,7 @@ def export_excel(
     cfg = _get_module(module)
     _authorize_module(module, current_user, db)
     model = cfg["model"]
-    rows = db.query(model).all()
+    rows = scope_query(db.query(model), model, current_user).all() if hasattr(model, "department") else db.query(model).all()
 
     import openpyxl
     from urllib.parse import quote
@@ -213,7 +217,7 @@ def download_template(
     current_user: User = Depends(get_current_user),
 ):
     cfg = _get_module(module)
-    _authorize_module(module, current_user, db)
+    _authorize_module(module, current_user, db, "import")
     from urllib.parse import quote
     import openpyxl
     wb = openpyxl.Workbook()
@@ -255,8 +259,10 @@ async def import_excel(
     current_user: User = Depends(get_current_user),
 ):
     cfg = _get_module(module)
-    _authorize_module(module, current_user, db)
+    _authorize_module(module, current_user, db, "import")
     model = cfg["model"]
+    if current_user.role != "super_admin" and current_user.data_scope != "all" and module in ("wechat", "department"):
+        raise HTTPException(403, "该模块的批量导入需要全部部门数据范围")
 
     if not file.filename or not file.filename.lower().endswith(".xlsx"):
         raise HTTPException(400, "只允许上传 .xlsx 文件")
@@ -340,17 +346,42 @@ async def import_excel(
         # 过滤掉模型中不存在的字段
         mapper = inspect(model).columns.keys()
         clean_data = {k: v for k, v in data.items() if k in mapper}
+        if hasattr(model, "department_id"):
+            target_name = clean_data.get("department")
+            if current_user.role != "super_admin" and current_user.data_scope != "all":
+                target_name = target_name or current_user.department
+                if target_name != current_user.department:
+                    skipped += 1
+                    errors.append(f"第{row_idx}行：只能导入本部门数据")
+                    continue
+            if target_name:
+                clean_data["department"] = target_name
+            department = db.query(Department).filter(Department.name == target_name).first() if target_name else None
+            if target_name and not department:
+                skipped += 1
+                errors.append(f"第{row_idx}行：部门不存在，请先维护部门列表")
+                continue
+            if department:
+                clean_data["department_id"] = department.id
+        if module == "wechat" and clean_data.get("wx_password"):
+            clean_data["wx_password"] = encrypt_credential(clean_data["wx_password"])
 
         try:
-            item = model(**clean_data)
-            db.add(item)
-            db.add(OperationLog(user=current_user.name, module=cfg["label"], action="导入", detail=f"导入数据: {clean_data.get('asset_number') or clean_data.get('number') or clean_data.get('wx_account') or clean_data.get('name')}"))
+            with db.begin_nested():
+                item = model(**clean_data)
+                db.add(item)
+                db.add(OperationLog(user=current_user.name, module=cfg["label"], action="导入", detail=f"导入数据: {clean_data.get('asset_number') or clean_data.get('number') or clean_data.get('wx_account') or clean_data.get('name')}"))
+                db.flush()
             imported += 1
         except Exception as e:
             skipped += 1
             errors.append(f"第{row_idx}行：{str(e)[:100]}")
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(400, "导入未能保存，请检查数据后重试")
     return {
         "imported": imported,
         "skipped": skipped,

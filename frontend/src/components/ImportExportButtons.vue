@@ -1,19 +1,25 @@
 <template>
   <div style="display:flex;gap:8px">
-    <button class="ie-btn" @click="downloadTemplate" title="下载Excel导入模板">下载模板</button>
-    <button class="ie-btn" @click="exportFile">导出</button>
-    <button class="ie-btn primary" @click="$refs.fileInput.click()">导入</button>
+    <button v-if="canImport" class="ie-btn" @click="downloadTemplate" title="下载Excel导入模板">下载模板</button>
+    <button v-if="canExport" class="ie-btn" @click="exportFile">导出</button>
+    <button v-if="canImport" class="ie-btn primary" @click="$refs.fileInput.click()">导入</button>
     <input ref="fileInput" type="file" accept=".xlsx" style="display:none" @change="onImport">
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import { getBaseURL } from '../api'
 
-defineProps({ module: { type: String, required: true } })
+const props = defineProps({ module: { type: String, required: true } })
 const fileInput = ref(null)
+const currentUser = ref({ permissions: [] })
+const canExport = computed(() => currentUser.value.permissions?.includes('export'))
+const canImport = computed(() => currentUser.value.permissions?.includes('import') && ((currentUser.value.data_scope === 'all') || !['wechat', 'department'].includes(props.module)) && (props.module !== 'wechat' || currentUser.value.permissions?.includes('wechat_secret')))
+onMounted(async () => {
+  try { currentUser.value = (await api.get('/auth/me')).data } catch {}
+})
 
 function authHeaders() {
   const token = localStorage.getItem('token')
@@ -23,8 +29,8 @@ function authHeaders() {
 function exportFile() {
   const token = localStorage.getItem('token')
   const base = getBaseURL()
-  fetch(`${base}/ie/${module}/export`, { headers: authHeaders() })
-    .then(r => r.blob())
+  fetch(`${base}/ie/${props.module}/export`, { headers: authHeaders() })
+    .then(r => { if (!r.ok) throw new Error('请求失败'); return r.blob() })
     .then(blob => {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -40,8 +46,8 @@ function exportFile() {
 
 function downloadTemplate() {
   const base = getBaseURL()
-  fetch(`${base}/ie/${module}/template`, { headers: authHeaders() })
-    .then(r => r.blob())
+  fetch(`${base}/ie/${props.module}/template`, { headers: authHeaders() })
+    .then(r => { if (!r.ok) throw new Error('请求失败'); return r.blob() })
     .then(blob => {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -60,7 +66,7 @@ async function onImport(e) {
   const formData = new FormData()
   formData.append('file', file)
   try {
-    const res = await api.post(`/ie/${module}/import`, formData, {
+    const res = await api.post(`/ie/${props.module}/import`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     alert(res.data.message || '导入完成')

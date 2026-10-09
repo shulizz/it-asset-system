@@ -5,7 +5,7 @@ from datetime import date
 from typing import Optional
 from database import get_db
 from models import ScrapRequest, OperationLog, ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, TransferRecord, User
-from deps import require_admin, get_current_user, require_approver, require_perm
+from deps import require_admin, get_current_user, require_approver, require_perm, require_any, get_user_permissions, scope_query, check_scope
 
 router = APIRouter(prefix="/api/scrap", tags=["scrap"])
 
@@ -38,13 +38,25 @@ class ScrapIn(BaseModel):
 
 @router.get("")
 def list_scraps(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(ScrapRequest).order_by(ScrapRequest.id.desc()).all()
+    query = db.query(ScrapRequest)
+    if 'approval' not in get_user_permissions(current_user, db) and 'scrap' not in get_user_permissions(current_user, db):
+        query = query.filter(ScrapRequest.applicant == current_user.name)
+    return scope_query(query, ScrapRequest, current_user).order_by(ScrapRequest.id.desc()).all()
 
 @router.post("")
-def create_scrap(data: ScrapIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("scrap"))):
+def create_scrap(data: ScrapIn, db: Session = Depends(get_db), current_user: User = Depends(require_any("scrap", "apply"))):
+    model = ASSET_MAP.get(data.asset_type)
+    if not model or not data.asset_id:
+        raise HTTPException(400, '请选择有效资产')
+    asset = db.query(model).get(data.asset_id)
+    if not asset:
+        raise HTTPException(404, '资产不存在')
+    check_scope(asset, current_user)
+    if asset.status == 'scrapped':
+        raise HTTPException(400, '资产已经报废')
     data.submit_date = date.today()
     data.applicant = current_user.name
-    data.department = current_user.department
+    data.department = asset.department
     data.status = "pending_approval"
     data.auditor = None
     item = ScrapRequest(**data.dict())
@@ -59,6 +71,8 @@ def approve_scrap(item_id: int, db: Session = Depends(get_db), current_user: Use
     item = db.query(ScrapRequest).get(item_id)
     if not item:
         raise HTTPException(404, "申请不存在")
+    if current_user.role != "super_admin" and current_user.data_scope != "all" and (not current_user.department or item.department != current_user.department):
+        raise HTTPException(403, "只能审批本部门申请")
     if item.status != "pending_approval":
         raise HTTPException(400, f"申请已{ '审批通过' if item.status=='approved' else '已驳回' }，请勿重复操作")
     if item.applicant == current_user.name:
@@ -68,6 +82,7 @@ def approve_scrap(item_id: int, db: Session = Depends(get_db), current_user: Use
     asset = db.query(ASSET_MAP[item.asset_type]).get(item.asset_id)
     if not asset:
         raise HTTPException(404, "申请对应的资产不存在")
+    check_scope(asset, current_user)
     if asset.status == "scrapped":
         raise HTTPException(400, "资产已经报废")
     item.status = "approved"
@@ -76,7 +91,7 @@ def approve_scrap(item_id: int, db: Session = Depends(get_db), current_user: Use
     # 更新设备状态为已报废
     asset.status = "scrapped"
     set_asset_user(asset, None)
-    asset.department = None
+    # 保留资产归属部门，方便按部门查询历史报废数据
     tr = TransferRecord(
         transfer_number='TR-SCRAP-' + str(item.id),
         type='scrap', asset_desc=item.asset_desc,
@@ -92,6 +107,8 @@ def reject_scrap(item_id: int, db: Session = Depends(get_db), current_user: User
     item = db.query(ScrapRequest).get(item_id)
     if not item:
         raise HTTPException(404, "申请不存在")
+    if current_user.role != "super_admin" and current_user.data_scope != "all" and (not current_user.department or item.department != current_user.department):
+        raise HTTPException(403, "只能审批本部门申请")
     if item.status != "pending_approval":
         raise HTTPException(400, "申请已处理，请勿重复操作")
     if item.applicant == current_user.name:

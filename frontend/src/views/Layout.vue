@@ -9,14 +9,14 @@
         <router-link to="/dashboard" class="nav-item">
           <span class="nav-dot"></span>工作台
         </router-link>
-        <template v-if="perms.includes('assets')">
+        <template v-if="perms.includes('assets') || perms.includes('assets_write') || perms.includes('import') || perms.includes('export')">
           <div class="nav-group-title">资产档案</div>
           <router-link to="/assets-it" class="nav-item"><span class="nav-dot"></span>IT 设备</router-link>
           <router-link to="/assets-phone" class="nav-item"><span class="nav-dot"></span>手机设备</router-link>
           <router-link to="/assets-medical" class="nav-item"><span class="nav-dot"></span>医疗设备</router-link>
           <router-link to="/phone-numbers" class="nav-item"><span class="nav-dot"></span>电话号码</router-link>
-          <router-link to="/wechat" class="nav-item"><span class="nav-dot"></span>微信账号</router-link>
         </template>
+        <router-link v-if="perms.includes('wechat') && (user.role === 'super_admin' || user.data_scope === 'all')" to="/wechat" class="nav-item"><span class="nav-dot"></span>微信账号</router-link>
         <template v-if="perms.includes('transfer') || perms.includes('scrap')">
           <div class="nav-group-title">流转与处置</div>
           <router-link v-if="perms.includes('transfer')" to="/transfer" class="nav-item"><span class="nav-dot"></span>设备流转</router-link>
@@ -24,12 +24,12 @@
         </template>
         <div class="nav-group-title">日常</div>
         <router-link v-if="perms.includes('reports')" to="/reports" class="nav-item"><span class="nav-dot"></span>报表统计</router-link>
-        <router-link to="/apply" class="nav-item"><span class="nav-dot"></span>设备申请</router-link>
+        <router-link v-if="perms.includes('apply')" to="/apply" class="nav-item"><span class="nav-dot"></span>设备申请</router-link>
         <router-link v-if="perms.includes('idle')" to="/idle" class="nav-item"><span class="nav-dot"></span>空闲设备</router-link>
         <router-link v-if="perms.includes('scrapped')" to="/scrapped" class="nav-item"><span class="nav-dot"></span>报废设备</router-link>
         <router-link v-if="perms.includes('approval')" to="/delete-approval" class="nav-item"><span class="nav-dot"></span>审批中心</router-link>
         <router-link v-if="perms.includes('departments')" to="/departments" class="nav-item"><span class="nav-dot"></span>部门管理</router-link>
-        <router-link v-if="perms.includes('users')" to="/users" class="nav-item"><span class="nav-dot"></span>用户管理</router-link>
+        <router-link v-if="perms.includes('users')" to="/users" class="nav-item"><span class="nav-dot"></span>用户权限</router-link>
         <router-link v-if="perms.includes('roles')" to="/roles" class="nav-item"><span class="nav-dot"></span>角色权限</router-link>
         <router-link v-if="perms.includes('logs')" to="/logs" class="nav-item"><span class="nav-dot"></span>操作日志</router-link>
       </nav>
@@ -51,16 +51,21 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, onUnmounted } from 'vue'
 import api from '../api'
 
 const CURRENT_VERSION = '1.0.0'
 
-onMounted(async () => {})
+let refreshTimer
+async function refreshUser() {
+  try { const { data } = await api.get('/auth/me'); user.value = data; localStorage.setItem('user', JSON.stringify(data)) } catch (e) { if (e.response?.status === 401) logout() }
+}
+onMounted(() => { refreshUser(); refreshTimer = setInterval(refreshUser, 15000) })
+onUnmounted(() => clearInterval(refreshTimer))
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const user = computed(() => JSON.parse(localStorage.getItem('user') || '{}'))
+const user = ref(JSON.parse(localStorage.getItem('user') || '{}'))
 const role = computed(() => user.value.role || '')
 const perms = computed(() => user.value.permissions || [])
 const roleText = computed(() => role.value === 'super_admin' ? '超级管理员' : role.value)

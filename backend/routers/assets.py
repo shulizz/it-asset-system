@@ -5,7 +5,7 @@ from datetime import date
 from typing import Optional
 from database import get_db
 from models import ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, OperationLog, User, Department
-from deps import get_current_user, require_perm
+from deps import get_current_user, require_perm, scope_query, check_scope, require_any
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
 
@@ -35,16 +35,17 @@ def sync_department_id(db, item):
     item.department_id = department.id if department else None
 
 @router.get("/it")
-def list_it(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(ITAsset).all()
+def list_it(db: Session = Depends(get_db), current_user: User = Depends(require_any("assets", "assets_write", "import", "export", "reports", "idle", "scrapped", "apply", "transfer", "scrap", "approval"))):
+    return scope_query(db.query(ITAsset), ITAsset, current_user).all()
 
 @router.post("/it")
-def create_it(data: ITAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
+def create_it(data: ITAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
     number = data.asset_number or gen_number(db, ITAsset, "IT")
     if data.user_name:
         data.status = "in_use"
     item = ITAsset(asset_number=number, **{k:v for k,v in data.dict().items() if k != 'asset_number'})
     sync_department_id(db, item)
+    check_scope(item, current_user)
     db.add(item)
     db.add(OperationLog(user=current_user.name, module="IT设备", action="新增", detail=f"新增设备 {number}"))
     db.commit()
@@ -52,8 +53,8 @@ def create_it(data: ITAssetIn, db: Session = Depends(get_db), current_user: User
     return item
 
 @router.put("/it/{item_id}")
-def update_it(item_id: int, data: ITAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
-    item = db.query(ITAsset).get(item_id)
+def update_it(item_id: int, data: ITAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+    item = scope_query(db.query(ITAsset), ITAsset, current_user).filter(ITAsset.id == item_id).first()
     if not item:
         raise HTTPException(404, "设备不存在")
     if item.status == "scrapped":
@@ -64,6 +65,7 @@ def update_it(item_id: int, data: ITAssetIn, db: Session = Depends(get_db), curr
     for k, v in data.dict().items():
         setattr(item, k, v)
     sync_department_id(db, item)
+    check_scope(item, current_user)
     db.add(OperationLog(user=current_user.name, module="IT设备", action="编辑", detail=f"编辑设备 {item.asset_number}"))
     db.commit()
     db.refresh(item)
@@ -82,16 +84,17 @@ class PhoneAssetIn(BaseModel):
     notes: Optional[str] = None
 
 @router.get("/phone")
-def list_phone(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(PhoneAsset).all()
+def list_phone(db: Session = Depends(get_db), current_user: User = Depends(require_any("assets", "assets_write", "import", "export", "reports", "idle", "scrapped", "apply", "transfer", "scrap", "approval"))):
+    return scope_query(db.query(PhoneAsset), PhoneAsset, current_user).all()
 
 @router.post("/phone")
-def create_phone(data: PhoneAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
+def create_phone(data: PhoneAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
     number = data.asset_number or gen_number(db, PhoneAsset, "PH")
     if data.user_name:
         data.status = "in_use"
     item = PhoneAsset(asset_number=number, **{k:v for k,v in data.dict().items() if k != 'asset_number'})
     sync_department_id(db, item)
+    check_scope(item, current_user)
     db.add(item)
     db.add(OperationLog(user=current_user.name, module="手机设备", action="新增", detail=f"新增手机 {number}"))
     db.commit()
@@ -99,8 +102,8 @@ def create_phone(data: PhoneAssetIn, db: Session = Depends(get_db), current_user
     return item
 
 @router.put("/phone/{item_id}")
-def update_phone(item_id: int, data: PhoneAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
-    item = db.query(PhoneAsset).get(item_id)
+def update_phone(item_id: int, data: PhoneAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+    item = scope_query(db.query(PhoneAsset), PhoneAsset, current_user).filter(PhoneAsset.id == item_id).first()
     if not item:
         raise HTTPException(404, "设备不存在")
     if item.status == "scrapped":
@@ -111,6 +114,7 @@ def update_phone(item_id: int, data: PhoneAssetIn, db: Session = Depends(get_db)
     for k, v in data.dict().items():
         setattr(item, k, v)
     sync_department_id(db, item)
+    check_scope(item, current_user)
     db.add(OperationLog(user=current_user.name, module="手机设备", action="编辑", detail=f"编辑手机 {item.asset_number}"))
     db.commit()
     db.refresh(item)
@@ -132,16 +136,17 @@ class MedicalAssetIn(BaseModel):
     notes: Optional[str] = None
 
 @router.get("/medical")
-def list_medical(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(MedicalAsset).all()
+def list_medical(db: Session = Depends(get_db), current_user: User = Depends(require_any("assets", "assets_write", "import", "export", "reports", "idle", "scrapped", "apply", "transfer", "scrap", "approval"))):
+    return scope_query(db.query(MedicalAsset), MedicalAsset, current_user).all()
 
 @router.post("/medical")
-def create_medical(data: MedicalAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
+def create_medical(data: MedicalAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
     number = data.asset_number or gen_number(db, MedicalAsset, "MED")
     if data.keeper:
         data.status = "in_use"
     item = MedicalAsset(asset_number=number, **{k:v for k,v in data.dict().items() if k != 'asset_number'})
     sync_department_id(db, item)
+    check_scope(item, current_user)
     db.add(item)
     db.add(OperationLog(user=current_user.name, module="医疗设备", action="新增", detail=f"新增医疗设备 {number}"))
     db.commit()
@@ -149,8 +154,8 @@ def create_medical(data: MedicalAssetIn, db: Session = Depends(get_db), current_
     return item
 
 @router.put("/medical/{item_id}")
-def update_medical(item_id: int, data: MedicalAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
-    item = db.query(MedicalAsset).get(item_id)
+def update_medical(item_id: int, data: MedicalAssetIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+    item = scope_query(db.query(MedicalAsset), MedicalAsset, current_user).filter(MedicalAsset.id == item_id).first()
     if not item:
         raise HTTPException(404, "设备不存在")
     if item.status == "scrapped":
@@ -161,6 +166,7 @@ def update_medical(item_id: int, data: MedicalAssetIn, db: Session = Depends(get
     for k, v in data.dict().items():
         setattr(item, k, v)
     sync_department_id(db, item)
+    check_scope(item, current_user)
     db.add(OperationLog(user=current_user.name, module="医疗设备", action="编辑", detail=f"编辑医疗设备 {item.asset_number}"))
     db.commit()
     db.refresh(item)
@@ -179,16 +185,17 @@ class PhoneNumberIn(BaseModel):
     notes: Optional[str] = None
 
 @router.get("/numbers")
-def list_numbers(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(PhoneNumber).all()
+def list_numbers(db: Session = Depends(get_db), current_user: User = Depends(require_any("assets", "assets_write", "import", "export", "reports", "idle", "scrapped", "apply", "transfer", "scrap", "approval"))):
+    return scope_query(db.query(PhoneNumber), PhoneNumber, current_user).all()
 
 @router.post("/numbers")
-def create_number(data: PhoneNumberIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
+def create_number(data: PhoneNumberIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
     if db.query(PhoneNumber).filter(PhoneNumber.number == data.number).first():
         raise HTTPException(400, f"号码 {data.number} 已存在")
     data.status = "in_use" if data.user_name else "idle"
     item = PhoneNumber(**data.dict())
     sync_department_id(db, item)
+    check_scope(item, current_user)
     db.add(item)
     db.add(OperationLog(user=current_user.name, module="电话号码", action="新增", detail=f"新增号码 {data.number}"))
     db.commit()
@@ -196,8 +203,8 @@ def create_number(data: PhoneNumberIn, db: Session = Depends(get_db), current_us
     return item
 
 @router.put("/numbers/{item_id}")
-def update_number(item_id: int, data: PhoneNumberIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
-    item = db.query(PhoneNumber).get(item_id)
+def update_number(item_id: int, data: PhoneNumberIn, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+    item = scope_query(db.query(PhoneNumber), PhoneNumber, current_user).filter(PhoneNumber.id == item_id).first()
     if not item:
         raise HTTPException(404, "号码不存在")
     if item.status not in ("cancelled", "unused"):
@@ -205,6 +212,7 @@ def update_number(item_id: int, data: PhoneNumberIn, db: Session = Depends(get_d
     for k, v in data.dict().items():
         setattr(item, k, v)
     sync_department_id(db, item)
+    check_scope(item, current_user)
     db.add(OperationLog(user=current_user.name, module="电话号码", action="编辑", detail=f"编辑号码 {item.number}"))
     db.commit()
     db.refresh(item)
@@ -213,12 +221,14 @@ def update_number(item_id: int, data: PhoneNumberIn, db: Session = Depends(get_d
 
 # ===== 医疗设备到期提醒邮件 =====
 @router.get("/medical/expiring")
-def list_expiring(days: int = 30, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_expiring(days: int = 30, db: Session = Depends(get_db), current_user: User = Depends(require_any("assets", "reports", "idle", "scrapped", "apply", "transfer", "scrap", "approval"))):
     from notifier import get_expiring_medical
-    return get_expiring_medical(db, days)
+    return get_expiring_medical(db, days, current_user)
 
 @router.post("/medical/send-expiry-email")
-def send_expiry_email(days: int = 30, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets"))):
+def send_expiry_email(days: int = 30, db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+    if current_user.role != 'super_admin' and current_user.data_scope != 'all':
+        raise HTTPException(403, '发送全局到期提醒需要全部部门数据范围')
     from notifier import send_expiry_notice
     result = send_expiry_notice(db, days)
     db.add(OperationLog(user=current_user.name, module="邮件提醒", action="发送到期提醒",

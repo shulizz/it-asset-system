@@ -27,6 +27,8 @@ class User(Base):
     name = Column(String(50), nullable=False)
     role = Column(String(50), nullable=False)  # 角色名，关联 Role.name，或 super_admin
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=True, index=True)
+    permissions = Column(Text, nullable=True)
+    data_scope = Column(String(20), nullable=False, default="department")
     department = Column(String(50))
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
     is_active = Column(Integer, default=1)  # 1启用 0停用
@@ -159,7 +161,7 @@ class WeChatAccount(Base):
     __tablename__ = "wechat_accounts"
     id = Column(Integer, primary_key=True, index=True)
     wx_account = Column(String(100), unique=True, index=True, nullable=False)
-    wx_password = Column(String(100))
+    wx_password = Column(Text)
     real_name = Column(String(50))
     user_name = Column(String(50))
     purpose = Column(String(200))

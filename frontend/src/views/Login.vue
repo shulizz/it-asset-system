@@ -42,7 +42,8 @@ import api, { setServerURL } from '../api'
 
 const router = useRouter()
 const username = ref(localStorage.getItem('remember_username') || '')
-const password = ref(localStorage.getItem('remember_password') || '')
+localStorage.removeItem('remember_password')
+const password = ref('')
 const remember = ref(!!localStorage.getItem('remember_username'))
 const error = ref('')
 const showSettings = ref(false)
@@ -62,7 +63,7 @@ async function login() {
     localStorage.setItem('user', JSON.stringify(res.data.user))
     if (remember.value) {
       localStorage.setItem('remember_username', username.value)
-      localStorage.setItem('remember_password', password.value)
+      localStorage.removeItem('remember_password')
     } else {
       localStorage.removeItem('remember_username')
       localStorage.removeItem('remember_password')

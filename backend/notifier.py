@@ -41,11 +41,15 @@ def send_email(to_list: list, subject: str, content: str) -> dict:
         return {"success": False, "message": f"邮件发送失败: {str(e)}"}
 
 
-def get_expiring_medical(db: Session, days: int = 30) -> list:
+def get_expiring_medical(db: Session, days: int = 30, user=None) -> list:
     """获取 N 天内即将到期或已过期的医疗设备"""
     today = date.today()
     deadline = today + timedelta(days=days)
-    assets = db.query(MedicalAsset).filter(
+    query = db.query(MedicalAsset)
+    if user is not None:
+        from deps import scope_query
+        query = scope_query(query, MedicalAsset, user)
+    assets = query.filter(
         MedicalAsset.expiry_date.isnot(None),
         MedicalAsset.status != "scrapped",
     ).all()

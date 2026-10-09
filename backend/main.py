@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
 from database import engine, SessionLocal, Base
-from models import User, Department
+from models import User, Department, Role
 from passlib.context import CryptContext
 from routers import auth, assets, transfer, scrap, delete_req, logs, departments, backup, version, wechat, import_export
 
@@ -13,7 +13,7 @@ Base.metadata.create_all(bind=engine)
 from sqlalchemy import text
 with engine.connect() as conn:
     id_columns = {
-        "users": ["role_id INTEGER", "department_id INTEGER"],
+        "users": ["role_id INTEGER", "department_id INTEGER", "permissions TEXT", "data_scope VARCHAR(20)"],
         "it_assets": ["department_id INTEGER"],
         "phone_assets": ["department_id INTEGER"],
         "medical_assets": ["department_id INTEGER"],
@@ -30,6 +30,7 @@ with engine.connect() as conn:
         conn.execute(text(f"UPDATE {table} SET department=NULL WHERE trim(coalesce(department, ''))=''"))
         conn.execute(text(f"INSERT OR IGNORE INTO departments(name, note) SELECT DISTINCT trim(department), '历史数据自动迁移' FROM {table} WHERE department IS NOT NULL"))
         conn.execute(text(f"UPDATE {table} SET department_id=(SELECT id FROM departments WHERE departments.name={table}.department) WHERE department_id IS NULL AND department IS NOT NULL"))
+    conn.execute(text("UPDATE users SET data_scope=CASE WHEN role IN ('super_admin','asset_admin') THEN 'all' ELSE 'department' END WHERE data_scope IS NULL"))
     conn.commit()
     for col in ['new_user VARCHAR(50)', 'new_dept VARCHAR(50)', 'model VARCHAR(100)', 'notes VARCHAR(500)']:
         try:
@@ -42,7 +43,8 @@ app = FastAPI(title="IT资产管理系统 API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    # API authentication uses explicit Bearer tokens, not browser cookies.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -85,6 +87,14 @@ def seed_admin():
         for name in ["IT部", "研发部", "市场部", "财务部", "行政部", "管理层"]:
             db.add(Department(name=name))
         db.commit()
+    from deps import get_user_permissions
+    import json
+    for user in db.query(User).filter(User.permissions.is_(None)).all():
+        user.permissions = json.dumps(get_user_permissions(user, db))
+        if user.department and not user.department_id:
+            department = db.query(Department).filter(Department.name == user.department).first()
+            user.department_id = department.id if department else None
+    db.commit()
     from routers.backup import do_backup
     try: do_backup()
     except: pass
