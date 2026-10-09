@@ -38,6 +38,9 @@ def update_dept(dept_id: int, data: DeptIn, db: Session = Depends(get_db), curre
     item.name = data.name
     item.manager = data.manager
     item.note = data.note
+    for model in [User, ITAsset, PhoneAsset, MedicalAsset, PhoneNumber]:
+        db.query(model).filter(model.department_id == item.id).update({model.department: data.name})
+        db.query(model).filter(model.department_id.is_(None), model.department == old_name).update({model.department: data.name, model.department_id: item.id})
     db.add(OperationLog(user=current_user.name, module="部门管理", action="编辑", detail=f"编辑部门：{old_name} → {data.name}"))
     db.commit()
     db.refresh(item)
@@ -48,8 +51,8 @@ def delete_dept(dept_id: int, db: Session = Depends(get_db), current_user: User 
     item = db.query(Department).get(dept_id)
     if not item:
         raise HTTPException(404, "部门不存在")
-    for model in [ITAsset, PhoneAsset, MedicalAsset, PhoneNumber]:
-        db.query(model).filter(model.department == item.name).update({model.department: None})
+    for model in [User, ITAsset, PhoneAsset, MedicalAsset, PhoneNumber]:
+        db.query(model).filter((model.department_id == item.id) | (model.department == item.name)).update({model.department: None, model.department_id: None})
     db.delete(item)
     db.add(OperationLog(user=current_user.name, module="部门管理", action="删除", detail=f"删除部门：{item.name}"))
     db.commit()

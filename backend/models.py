@@ -26,7 +26,9 @@ class User(Base):
     password_hash = Column(String(200), nullable=False)
     name = Column(String(50), nullable=False)
     role = Column(String(50), nullable=False)  # 角色名，关联 Role.name，或 super_admin
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=True, index=True)
     department = Column(String(50))
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
     is_active = Column(Integer, default=1)  # 1启用 0停用
 
 # ===== IT设备 =====
@@ -39,6 +41,7 @@ class ITAsset(Base):
     category = Column(String(50))                     # 笔记本/台式机/显示器/打印机/网络设备
     user_name = Column(String(50))                    # 使用人
     department = Column(String(50))                   # 部门
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
     status = Column(String(20), default="in_use")     # in_use/idle/scrapped/archived
     purchase_date = Column(Date)
     warranty_expiry = Column(Date)
@@ -55,6 +58,7 @@ class PhoneAsset(Base):
     bound_number = Column(String(20))               # 绑定号码
     user_name = Column(String(50))
     department = Column(String(50))
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
     status = Column(String(20), default="in_use")
     purchase_date = Column(Date)
     notes = Column(Text)
@@ -67,6 +71,7 @@ class MedicalAsset(Base):
     name = Column(String(100), nullable=False)
     model = Column(String(100))
     department = Column(String(50))                   # 科室
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
     keeper = Column(String(50))                       # 保管人
     calibration_expiry = Column(Date)                 # 校准到期日
     status = Column(String(20), default="in_use")
@@ -85,6 +90,7 @@ class PhoneNumber(Base):
     card_type = Column(String(20))                    # main(主卡)/sub(副卡)/landline(座机)
     plan = Column(String(50))                         # 套餐
     department = Column(String(50))
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
     user_name = Column(String(50))
     bound_device = Column(String(100))                # 绑定设备
     status = Column(String(20), default="in_use")     # in_use/idle/cancelled/unused

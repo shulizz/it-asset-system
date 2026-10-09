@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from datetime import date
 from typing import Optional
 from database import get_db
-from models import ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, OperationLog, User
+from models import ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, OperationLog, User, Department
 from deps import get_current_user, require_perm
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
@@ -28,6 +28,12 @@ def gen_number(db, model, prefix):
     count = db.query(model).filter(model.asset_number.like(f"{prefix}-{year}-%")).count()
     return f"{prefix}-{year}-{count+1:03d}"
 
+def sync_department_id(db, item):
+    department = db.query(Department).filter(Department.name == item.department).first() if item.department else None
+    if item.department and not department:
+        raise HTTPException(400, "部门不存在")
+    item.department_id = department.id if department else None
+
 @router.get("/it")
 def list_it(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(ITAsset).all()
@@ -38,6 +44,7 @@ def create_it(data: ITAssetIn, db: Session = Depends(get_db), current_user: User
     if data.user_name:
         data.status = "in_use"
     item = ITAsset(asset_number=number, **{k:v for k,v in data.dict().items() if k != 'asset_number'})
+    sync_department_id(db, item)
     db.add(item)
     db.add(OperationLog(user=current_user.name, module="IT设备", action="新增", detail=f"新增设备 {number}"))
     db.commit()
@@ -56,6 +63,7 @@ def update_it(item_id: int, data: ITAssetIn, db: Session = Depends(get_db), curr
     data.status = "in_use" if data.user_name else "idle"
     for k, v in data.dict().items():
         setattr(item, k, v)
+    sync_department_id(db, item)
     db.add(OperationLog(user=current_user.name, module="IT设备", action="编辑", detail=f"编辑设备 {item.asset_number}"))
     db.commit()
     db.refresh(item)
@@ -83,6 +91,7 @@ def create_phone(data: PhoneAssetIn, db: Session = Depends(get_db), current_user
     if data.user_name:
         data.status = "in_use"
     item = PhoneAsset(asset_number=number, **{k:v for k,v in data.dict().items() if k != 'asset_number'})
+    sync_department_id(db, item)
     db.add(item)
     db.add(OperationLog(user=current_user.name, module="手机设备", action="新增", detail=f"新增手机 {number}"))
     db.commit()
@@ -101,6 +110,7 @@ def update_phone(item_id: int, data: PhoneAssetIn, db: Session = Depends(get_db)
     data.status = "in_use" if data.user_name else "idle"
     for k, v in data.dict().items():
         setattr(item, k, v)
+    sync_department_id(db, item)
     db.add(OperationLog(user=current_user.name, module="手机设备", action="编辑", detail=f"编辑手机 {item.asset_number}"))
     db.commit()
     db.refresh(item)
@@ -131,6 +141,7 @@ def create_medical(data: MedicalAssetIn, db: Session = Depends(get_db), current_
     if data.keeper:
         data.status = "in_use"
     item = MedicalAsset(asset_number=number, **{k:v for k,v in data.dict().items() if k != 'asset_number'})
+    sync_department_id(db, item)
     db.add(item)
     db.add(OperationLog(user=current_user.name, module="医疗设备", action="新增", detail=f"新增医疗设备 {number}"))
     db.commit()
@@ -149,6 +160,7 @@ def update_medical(item_id: int, data: MedicalAssetIn, db: Session = Depends(get
     data.status = "in_use" if data.keeper else "idle"
     for k, v in data.dict().items():
         setattr(item, k, v)
+    sync_department_id(db, item)
     db.add(OperationLog(user=current_user.name, module="医疗设备", action="编辑", detail=f"编辑医疗设备 {item.asset_number}"))
     db.commit()
     db.refresh(item)
@@ -176,6 +188,7 @@ def create_number(data: PhoneNumberIn, db: Session = Depends(get_db), current_us
         raise HTTPException(400, f"号码 {data.number} 已存在")
     data.status = "in_use" if data.user_name else "idle"
     item = PhoneNumber(**data.dict())
+    sync_department_id(db, item)
     db.add(item)
     db.add(OperationLog(user=current_user.name, module="电话号码", action="新增", detail=f"新增号码 {data.number}"))
     db.commit()
@@ -191,6 +204,7 @@ def update_number(item_id: int, data: PhoneNumberIn, db: Session = Depends(get_d
         data.status = "in_use" if data.user_name else "idle"
     for k, v in data.dict().items():
         setattr(item, k, v)
+    sync_department_id(db, item)
     db.add(OperationLog(user=current_user.name, module="电话号码", action="编辑", detail=f"编辑号码 {item.number}"))
     db.commit()
     db.refresh(item)

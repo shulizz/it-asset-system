@@ -12,6 +12,25 @@ Base.metadata.create_all(bind=engine)
 
 from sqlalchemy import text
 with engine.connect() as conn:
+    id_columns = {
+        "users": ["role_id INTEGER", "department_id INTEGER"],
+        "it_assets": ["department_id INTEGER"],
+        "phone_assets": ["department_id INTEGER"],
+        "medical_assets": ["department_id INTEGER"],
+        "phone_numbers": ["department_id INTEGER"],
+    }
+    for table, columns in id_columns.items():
+        existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
+        for column in columns:
+            column_name = column.split()[0]
+            if column_name not in existing:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column}"))
+    conn.execute(text("UPDATE users SET role_id=(SELECT id FROM roles WHERE roles.name=users.role) WHERE role_id IS NULL AND role <> 'super_admin'"))
+    for table in ["users", "it_assets", "phone_assets", "medical_assets", "phone_numbers"]:
+        conn.execute(text(f"UPDATE {table} SET department=NULL WHERE trim(coalesce(department, ''))=''"))
+        conn.execute(text(f"INSERT OR IGNORE INTO departments(name, note) SELECT DISTINCT trim(department), '历史数据自动迁移' FROM {table} WHERE department IS NOT NULL"))
+        conn.execute(text(f"UPDATE {table} SET department_id=(SELECT id FROM departments WHERE departments.name={table}.department) WHERE department_id IS NULL AND department IS NOT NULL"))
+    conn.commit()
     for col in ['new_user VARCHAR(50)', 'new_dept VARCHAR(50)', 'model VARCHAR(100)', 'notes VARCHAR(500)']:
         try:
             conn.execute(text(f"ALTER TABLE it_assets ADD COLUMN {col}"))

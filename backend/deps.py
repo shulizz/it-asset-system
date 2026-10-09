@@ -33,7 +33,9 @@ def get_user_permissions(user: User, db: Session) -> list:
     if user.role == "super_admin":
         return ["assets", "transfer", "scrap", "approval", "reports", "idle",
                 "scrapped", "departments", "logs", "users", "roles"]
-    role_obj = db.query(Role).filter(Role.name == user.role).first()
+    role_obj = db.query(Role).filter(Role.id == user.role_id).first() if user.role_id else None
+    if not role_obj:
+        role_obj = db.query(Role).filter(Role.name == user.role).first()
     if role_obj and role_obj.permissions:
         try:
             return json.loads(role_obj.permissions)

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from database import get_db
-from models import User, OperationLog, Role
+from models import User, OperationLog, Role, Department
 from deps import require_super_admin, SECRET_KEY, ALGORITHM
 import json
 
@@ -52,7 +52,9 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     if user.role == "super_admin":
         perms = [p[0] for p in ALL_PERMISSIONS] + ["users", "roles"]
     else:
-        role_obj = db.query(Role).filter(Role.name == user.role).first()
+        role_obj = db.query(Role).filter(Role.id == user.role_id).first() if user.role_id else None
+        if not role_obj:
+            role_obj = db.query(Role).filter(Role.name == user.role).first()
         if role_obj and role_obj.permissions:
             try:
                 perms = json.loads(role_obj.permissions)
@@ -79,8 +81,16 @@ def list_users(db: Session = Depends(get_db), user = Depends(require_super_admin
 def create_user(data: UserIn, db: Session = Depends(get_db), current_user = Depends(require_super_admin)):
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(400, "用户名已存在")
+    role = None if data.role == "super_admin" else db.query(Role).filter(Role.name == data.role).first()
+    if data.role != "super_admin" and not role:
+        raise HTTPException(400, "角色不存在")
+    department = db.query(Department).filter(Department.name == data.department).first() if data.department else None
+    if data.department and not department:
+        raise HTTPException(400, "部门不存在")
     new_user = User(username=data.username, name=data.name, role=data.role,
-                department=data.department, password_hash=pwd_context.hash(data.password or "123456"))
+                role_id=role.id if role else None, department=data.department,
+                department_id=department.id if department else None,
+                password_hash=pwd_context.hash(data.password or "123456"))
     db.add(new_user)
     db.commit()
     return new_user
@@ -91,8 +101,16 @@ def update_user(user_id: int, data: UserIn, db: Session = Depends(get_db), user 
     if not user:
         raise HTTPException(404, "用户不存在")
     user.name = data.name
+    role = None if data.role == "super_admin" else db.query(Role).filter(Role.name == data.role).first()
+    if data.role != "super_admin" and not role:
+        raise HTTPException(400, "角色不存在")
+    department = db.query(Department).filter(Department.name == data.department).first() if data.department else None
+    if data.department and not department:
+        raise HTTPException(400, "部门不存在")
     user.role = data.role
+    user.role_id = role.id if role else None
     user.department = data.department
+    user.department_id = department.id if department else None
     if data.password:
         user.password_hash = pwd_context.hash(data.password)
     db.commit()
@@ -158,8 +176,16 @@ def update_role(role_id: int, data: RoleIn, db: Session = Depends(get_db), user 
     role = db.query(Role).get(role_id)
     if not role:
         raise HTTPException(404, "角色不存在")
+    if data.name == "super_admin":
+        raise HTTPException(400, "不能使用保留角色名")
+    duplicate = db.query(Role).filter(Role.name == data.name, Role.id != role_id).first()
+    if duplicate:
+        raise HTTPException(400, "角色名已存在")
+    old_name = role.name
     role.name = data.name
     role.permissions = json.dumps(data.permissions, ensure_ascii=False)
+    db.query(User).filter(User.role_id == role.id).update({User.role: data.name})
+    db.query(User).filter(User.role_id.is_(None), User.role == old_name).update({User.role: data.name, User.role_id: role.id})
     db.commit()
     return role
 
@@ -169,7 +195,7 @@ def delete_role(role_id: int, db: Session = Depends(get_db), user = Depends(requ
     if not role:
         raise HTTPException(404, "角色不存在")
     # 检查是否有用户在用
-    count = db.query(User).filter(User.role == role.name).count()
+    count = db.query(User).filter((User.role_id == role.id) | (User.role == role.name)).count()
     if count > 0:
         raise HTTPException(400, f"该角色下还有 {count} 个用户，不能删除")
     db.delete(role)
