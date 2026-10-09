@@ -11,6 +11,13 @@ class Department(Base):
     manager = Column(String(50))
     note = Column(String(200))
 
+# ===== 自定义角色 =====
+class Role(Base):
+    __tablename__ = "roles"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(50), unique=True, nullable=False)  # 角色名称，如"设备科科长"
+    permissions = Column(Text, default="")  # JSON数组，权限key列表
+
 # ===== 用户 =====
 class User(Base):
     __tablename__ = "users"
@@ -18,7 +25,7 @@ class User(Base):
     username = Column(String(50), unique=True, index=True, nullable=False)
     password_hash = Column(String(200), nullable=False)
     name = Column(String(50), nullable=False)
-    role = Column(String(20), nullable=False)  # super_admin / asset_admin / dept_lead / leader
+    role = Column(String(50), nullable=False)  # 角色名，关联 Role.name，或 super_admin
     department = Column(String(50))
     is_active = Column(Integer, default=1)  # 1启用 0停用
 

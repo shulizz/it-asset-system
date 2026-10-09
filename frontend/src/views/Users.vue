@@ -49,9 +49,7 @@
         <div class="form-row"><label>角色</label>
           <select v-model="form.role">
             <option value="super_admin">超级管理员</option>
-            <option value="asset_admin">资产管理员</option>
-            <option value="dept_lead">部门主管</option>
-            <option value="leader">公司领导</option>
+            <option v-for="r in roleList" :value="r.name">{{ r.name }}</option>
           </select>
         </div>
         <div class="form-row"><label>部门</label>
@@ -71,13 +69,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '../api'
-const list = ref([]), showForm = ref(false), deptList = ref([]), backups = ref([])
-const form = ref({ id:null, username:'', name:'', password:'', role:'asset_admin', department:'' })
+const list = ref([]), showForm = ref(false), deptList = ref([]), backups = ref([]), roleList = ref([])
+const form = ref({ id:null, username:'', name:'', password:'', role:'', department:'' })
 async function load(){
-  const [u, d, b] = await Promise.all([api.get('/auth/users'), api.get('/departments'), api.get('/backup/list')])
+  const [u, d, b, r] = await Promise.all([api.get('/auth/users'), api.get('/departments'), api.get('/backup/list'), api.get('/auth/roles')])
   list.value = u.data
   deptList.value = d.data
   backups.value = b.data
+  roleList.value = r.data
 }
 async function backupNow(){
   await api.post('/backup/')
@@ -101,8 +100,8 @@ async function del(u){
   await api.delete(`/auth/users/${u.id}`)
   load()
 }
-function roleClass(r){ return {super_admin:'red',asset_admin:'blue',dept_lead:'green',leader:'purple'}[r]||'gray' }
-function roleText(r){ return {super_admin:'超级管理员',asset_admin:'资产管理员',dept_lead:'部门主管',leader:'公司领导'}[r]||r }
+function roleClass(r){ return r==='super_admin' ? 'red' : 'blue' }
+function roleText(r){ return r==='super_admin' ? '超级管理员' : r }
 onMounted(load)
 </script>
 <style scoped>

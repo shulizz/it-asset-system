@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 from database import get_db
 from models import DeleteRequest, OperationLog, ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, ScrapRequest, TransferRecord, User
-from deps import require_admin, get_current_user
+from deps import require_admin, get_current_user, require_approver
 
 router = APIRouter(prefix="/api/delete-request", tags=["delete-request"])
 
@@ -45,7 +45,7 @@ def create_request(data: DeleteReqIn, db: Session = Depends(get_db), current_use
     return item
 
 @router.put("/{item_id}/approve")
-def approve_request(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def approve_request(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_approver)):
     item = db.query(DeleteRequest).get(item_id)
     if not item:
         raise HTTPException(404, "申请不存在")
@@ -136,7 +136,7 @@ def approve_request(item_id: int, db: Session = Depends(get_db), current_user: U
     return item
 
 @router.put("/{item_id}/reject")
-def reject_request(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def reject_request(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_approver)):
     item = db.query(DeleteRequest).get(item_id)
     if not item:
         raise HTTPException(404, "申请不存在")

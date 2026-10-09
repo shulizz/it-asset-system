@@ -9,7 +9,7 @@
         <router-link to="/dashboard" class="nav-item">
           <span class="nav-dot"></span>工作台
         </router-link>
-        <template v-if="canSeeAssets">
+        <template v-if="perms.includes('assets')">
           <div class="nav-group-title">资产档案</div>
           <router-link to="/assets-it" class="nav-item"><span class="nav-dot"></span>IT 设备</router-link>
           <router-link to="/assets-phone" class="nav-item"><span class="nav-dot"></span>手机设备</router-link>
@@ -17,20 +17,21 @@
           <router-link to="/phone-numbers" class="nav-item"><span class="nav-dot"></span>电话号码</router-link>
           <router-link to="/wechat" class="nav-item"><span class="nav-dot"></span>微信账号</router-link>
         </template>
-        <template v-if="canSeeOps">
+        <template v-if="perms.includes('transfer') || perms.includes('scrap')">
           <div class="nav-group-title">流转与处置</div>
-          <router-link to="/transfer" class="nav-item"><span class="nav-dot"></span>设备流转</router-link>
-          <router-link to="/scrap" class="nav-item"><span class="nav-dot"></span>报废管理</router-link>
+          <router-link v-if="perms.includes('transfer')" to="/transfer" class="nav-item"><span class="nav-dot"></span>设备流转</router-link>
+          <router-link v-if="perms.includes('scrap')" to="/scrap" class="nav-item"><span class="nav-dot"></span>报废管理</router-link>
         </template>
-        <div class="nav-group-title">数据与管理</div>
-        <router-link to="/reports" class="nav-item"><span class="nav-dot"></span>报表统计</router-link>
+        <div class="nav-group-title">日常</div>
+        <router-link v-if="perms.includes('reports')" to="/reports" class="nav-item"><span class="nav-dot"></span>报表统计</router-link>
         <router-link to="/apply" class="nav-item"><span class="nav-dot"></span>设备申请</router-link>
-        <router-link to="/idle" class="nav-item"><span class="nav-dot"></span>空闲设备</router-link>
-        <router-link to="/scrapped" class="nav-item"><span class="nav-dot"></span>报废设备</router-link>
-        <router-link v-if="isApprover" to="/delete-approval" class="nav-item"><span class="nav-dot"></span>审批中心</router-link>
-        <router-link v-if="canSeeDept" to="/departments" class="nav-item"><span class="nav-dot"></span>部门管理</router-link>
-        <router-link v-if="isSuperAdmin" to="/users" class="nav-item"><span class="nav-dot"></span>用户管理</router-link>
-        <router-link v-if="canSeeLogs" to="/logs" class="nav-item"><span class="nav-dot"></span>操作日志</router-link>
+        <router-link v-if="perms.includes('idle')" to="/idle" class="nav-item"><span class="nav-dot"></span>空闲设备</router-link>
+        <router-link v-if="perms.includes('scrapped')" to="/scrapped" class="nav-item"><span class="nav-dot"></span>报废设备</router-link>
+        <router-link v-if="perms.includes('approval')" to="/delete-approval" class="nav-item"><span class="nav-dot"></span>审批中心</router-link>
+        <router-link v-if="perms.includes('departments')" to="/departments" class="nav-item"><span class="nav-dot"></span>部门管理</router-link>
+        <router-link v-if="perms.includes('users')" to="/users" class="nav-item"><span class="nav-dot"></span>用户管理</router-link>
+        <router-link v-if="perms.includes('roles')" to="/roles" class="nav-item"><span class="nav-dot"></span>角色权限</router-link>
+        <router-link v-if="perms.includes('logs')" to="/logs" class="nav-item"><span class="nav-dot"></span>操作日志</router-link>
       </nav>
       <div class="sidebar-footer">
         <div class="user-info">
@@ -60,22 +61,9 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 const user = computed(() => JSON.parse(localStorage.getItem('user') || '{}'))
-const role = computed(() => user.value.role || 'asset_admin')
-
-const isSuperAdmin = computed(() => role.value === 'super_admin')
-const isApprover = computed(() => ['super_admin', 'asset_admin'].includes(role.value))
-const isDeptLead = computed(() => role.value === 'dept_lead')
-const canSeeAssets = computed(() => ['super_admin', 'asset_admin', 'dept_lead'].includes(role.value))
-const canSeeOps = computed(() => ['super_admin', 'asset_admin'].includes(role.value))
-const canSeeDept = computed(() => ['super_admin', 'asset_admin'].includes(role.value))
-const canSeeLogs = computed(() => ['super_admin', 'asset_admin'].includes(role.value))
-
-const roleText = computed(() => ({
-  super_admin: '超级管理员',
-  asset_admin: '资产管理员',
-  dept_lead: '部门主管',
-  leader: '公司领导'
-}[role.value] || role.value))
+const role = computed(() => user.value.role || '')
+const perms = computed(() => user.value.permissions || [])
+const roleText = computed(() => role.value === 'super_admin' ? '超级管理员' : role.value)
 
 function logout() {
   localStorage.removeItem('token')

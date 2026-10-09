@@ -17,6 +17,7 @@ import IdleAssets from '../views/IdleAssets.vue'
 import ScrappedAssets from '../views/ScrappedAssets.vue'
 import Apply from '../views/Apply.vue'
 import WeChat from '../views/WeChat.vue'
+import Roles from '../views/Roles.vue'
 
 const routes = [
   { path: '/login', component: Login },
@@ -39,6 +40,7 @@ const routes = [
       { path: 'wechat', component: WeChat },
       { path: 'reports', component: Reports },
       { path: 'users', component: Users },
+      { path: 'roles', component: Roles },
       { path: 'departments', component: Departments },
       { path: 'logs', component: Logs }
     ]

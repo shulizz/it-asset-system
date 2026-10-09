@@ -194,3 +194,19 @@ def update_number(item_id: int, data: PhoneNumberIn, db: Session = Depends(get_d
     return item
 
 
+# ===== 医疗设备到期提醒邮件 =====
+@router.get("/medical/expiring")
+def list_expiring(days: int = 30, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from notifier import get_expiring_medical
+    return get_expiring_medical(db, days)
+
+@router.post("/medical/send-expiry-email")
+def send_expiry_email(days: int = 30, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from notifier import send_expiry_notice
+    result = send_expiry_notice(db, days)
+    db.add(OperationLog(user=current_user.name, module="邮件提醒", action="发送到期提醒",
+                        detail=f"到期提醒邮件，{result.get('count',0)}台设备: {result.get('message','')}"))
+    db.commit()
+    return result
+
+

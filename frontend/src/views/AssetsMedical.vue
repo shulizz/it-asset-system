@@ -22,13 +22,19 @@
     </div>
     <div class="panel">
       <table>
-        <thead><tr><th>资产编号</th><th>设备名称</th><th>型号</th><th>科室</th><th>保管人</th><th>使用年限</th><th>到期时间</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>资产编号</th><th>设备名称</th><th>型号</th><th>科室</th><th>保管人</th><th>使用年限</th><th>到期时间</th><th>剩余天数</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
-          <tr v-for="item in filteredList" :key="item.id">
+          <tr v-for="item in filteredList" :key="item.id" :class="{ 'expiring-row': daysLeft(item.expiry_date) !== null && daysLeft(item.expiry_date) <= 30 }">
             <td>{{ item.asset_number }}</td><td>{{ item.name }}</td><td>{{ item.model || '—' }}</td>
             <td>{{ item.department || '—' }}</td><td>{{ item.keeper || '—' }}</td>
             <td>{{ item.use_years != null ? item.use_years + ' 年' : '—' }}</td>
             <td>{{ formatDate(item.expiry_date) }}</td>
+            <td>
+              <span v-if="daysLeft(item.expiry_date) === null" style="color:#94a3b8">—</span>
+              <span v-else-if="daysLeft(item.expiry_date) < 0" class="badge red">已过期</span>
+              <span v-else-if="daysLeft(item.expiry_date) <= 30" class="badge red">{{ daysLeft(item.expiry_date) }}天</span>
+              <span v-else class="badge green">{{ daysLeft(item.expiry_date) }}天</span>
+            </td>
             <td><span class="badge" :class="statusClass(item.status)">{{ statusText(item.status) }}</span></td>
             <td><a @click="edit(item)" style="color:#2563eb;cursor:pointer;margin-right:10px">编辑</a><a @click="askDelete(item)" style="color:#ef4444;cursor:pointer">申请删除</a></td>
           </tr>
@@ -93,6 +99,13 @@ async function save(){
 function statusClass(s){ return {in_use:'green',idle:'amber',scrapped:'red'}[s]||'gray' }
 function statusText(s){ return {in_use:'在用',idle:'闲置',scrapped:'已报废'}[s]||s }
 function formatDate(d){ if(!d) return '—'; return d.substring(0,10) }
+function daysLeft(d){
+  if (!d) return null
+  const today = new Date()
+  today.setHours(0,0,0,0)
+  const target = new Date(d.substring(0,10))
+  return Math.ceil((target - today) / 86400000)
+}
 onMounted(async () => { load(); const res = await api.get('/departments'); deptList.value = res.data })
 </script>
 <style scoped>
@@ -102,6 +115,7 @@ th{background:#f8fafc;text-align:left;padding:10px 12px;font-size:12px;color:#64
 td{padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:13px}
 .badge{padding:2px 8px;border-radius:4px;font-size:12px}
 .green{background:#dcfce7;color:#16a34a}.amber{background:#fef3c7;color:#d97706}.red{background:#fee2e2;color:#dc2626}.gray{background:#f1f5f9;color:#64748b}
+.expiring-row{background:#fef2f2}
 .btn-primary{background:#2563eb;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px}
 .btn-outline{background:#fff;border:1px solid #e2e8f0;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px}
 .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:100}
