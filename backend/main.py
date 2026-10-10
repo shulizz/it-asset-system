@@ -25,7 +25,6 @@ with engine.connect() as conn:
             column_name = column.split()[0]
             if column_name not in existing:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column}"))
-    conn.execute(text("UPDATE users SET role_id=(SELECT id FROM roles WHERE roles.name=users.role) WHERE role_id IS NULL AND role <> 'super_admin'"))
     for table in ["users", "it_assets", "phone_assets", "medical_assets", "phone_numbers"]:
         conn.execute(text(f"UPDATE {table} SET department=NULL WHERE trim(coalesce(department, ''))=''"))
         conn.execute(text(f"INSERT OR IGNORE INTO departments(name, note) SELECT DISTINCT trim(department), '历史数据自动迁移' FROM {table} WHERE department IS NOT NULL"))
@@ -94,7 +93,15 @@ def seed_admin():
     from deps import get_user_permissions
     import json
     for user in db.query(User).filter(User.permissions.is_(None)).all():
-        user.permissions = json.dumps(get_user_permissions(user, db))
+        # Preserve legacy grants once; runtime access never depends on a role template.
+        legacy_role = db.get(Role, user.role_id) if user.role_id else db.query(Role).filter(Role.name == user.role).first()
+        from permissions import PERMISSION_KEYS
+        try:
+            legacy = json.loads(legacy_role.permissions) if legacy_role and legacy_role.permissions else []
+            grants = sorted(PERMISSION_KEYS.intersection(p for p in legacy if isinstance(p, str))) if isinstance(legacy, list) else []
+        except (ValueError, TypeError):
+            grants = []
+        user.permissions = json.dumps(get_user_permissions(user, db) if user.role == 'super_admin' else grants)
         if user.department and not user.department_id:
             department = db.query(Department).filter(Department.name == user.department).first()
             user.department_id = department.id if department else None

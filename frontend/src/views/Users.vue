@@ -50,13 +50,10 @@
         <div class="form-row"><label>姓名</label><input v-model="form.name"></div>
         <div class="form-row"><label for="user-email">邮箱（用于接收设备到期提醒）</label><input id="user-email" v-model="form.email" type="email" maxlength="254" placeholder="如：name@qq.com"><p style="font-size:12px;color:#64748b;margin-top:5px">可选；填写后可在发送提醒时选择该用户。</p></div>
         <div class="form-row"><label>密码</label><input v-model="form.password" type="password" :placeholder="form.id ? '不修改请留空' : '至少10个字符'"></div>
-        <div class="form-row"><label>角色</label>
-          <select v-model="form.role" @change="applyRoleTemplate">
-            <option value="">无角色模板（单独配置）</option>
-            <option value="super_admin">超级管理员</option>
-            <option v-for="r in roleList" :value="r.name">{{ r.name }}</option>
-          </select>
+        <div class="form-row"><label for="user-identity">账号身份</label>
+          <select id="user-identity" v-model="form.account_type"><option value="regular">普通用户</option><option value="super_admin">超级管理员</option></select>
         </div>
+        <div v-if="form.account_type !== 'super_admin'" class="form-row"><label for="user-role-name">角色名称</label><input id="user-role-name" v-model="form.role" maxlength="50" placeholder="如：资产管理员、部门负责人"><p style="font-size:12px;color:#64748b;margin-top:5px">角色只用于显示，操作权限由下方勾选项决定。</p></div>
         <div class="form-row"><label>部门</label>
           <select v-model="form.department">
             <option value="">-- 无 --</option>
@@ -64,13 +61,13 @@
           </select>
         </div>
         <div class="form-row"><label>数据范围</label>
-          <select v-model="form.data_scope" :disabled="form.role === 'super_admin'">
+          <select v-model="form.data_scope" :disabled="form.account_type === 'super_admin'">
             <option value="department">仅本部门</option><option value="all">全部部门</option>
           </select>
         </div>
         <p style="font-size:12px;color:#64748b">部门管理、全局日志、微信管理需要全部部门范围；微信密码需同时勾选微信管理。导入和导出需同时勾选对应模块权限。</p>
         <div class="form-row"><label>用户操作权限（可单独调整）</label>
-          <p v-if="form.role === 'super_admin'">超级管理员拥有全部权限。</p>
+          <p v-if="form.account_type === 'super_admin'">超级管理员拥有全部权限。</p>
           <div v-else style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <label v-for="p in permissionList" :key="p.key" style="display:flex;gap:6px;align-items:center">
               <input type="checkbox" :value="p.key" v-model="form.permissions" style="width:16px;height:16px">{{ p.label }}
@@ -90,32 +87,32 @@
 import { ref, onMounted } from 'vue'
 import api from '../api'
 import FileDownloadButton from '../components/FileDownloadButton.vue'
-const list = ref([]), showForm = ref(false), deptList = ref([]), backups = ref([]), roleList = ref([])
+const list = ref([]), showForm = ref(false), deptList = ref([]), backups = ref([])
 const permissionList = ref([]), formError = ref('')
-const form = ref({ id:null, username:'', name:'', email:'', password:'', role:'', department:'' })
+const form = ref({ id:null, username:'', name:'', email:'', password:'', role:'', account_type:'regular', department:'' })
 async function load(){
-  const [u, d, b, r, p] = await Promise.all([api.get('/auth/users'), api.get('/departments'), api.get('/backup/list'), api.get('/auth/roles'), api.get('/auth/permissions')])
+  const [u, d, b, p] = await Promise.all([api.get('/auth/users'), api.get('/departments'), api.get('/backup/list'), api.get('/auth/permissions')])
   list.value = u.data
   deptList.value = d.data
-  backups.value = b.data
-  roleList.value = r.data
-  permissionList.value = p.data
+  backups.value = b.data  permissionList.value = p.data
 }
 async function backupNow(){
   await api.post('/backup/')
   await load()
 }
 
-function openForm(){ formError.value = ''; form.value = { id:null, username:'', name:'', email:'', password:'', role:'', department:'', permissions:[], data_scope:'department' }; showForm.value = true }
-function edit(u){ formError.value = ''; form.value = {...u, permissions:[...(u.permissions || [])], password:''}; showForm.value = true }
-function applyRoleTemplate(){ const role = roleList.value.find(r => r.name === form.value.role); form.value.permissions = [...(role?.permissions || [])] }
+function openForm(){ formError.value = ''; form.value = { id:null, username:'', name:'', email:'', password:'', role:'', account_type:'regular', department:'', permissions:[], data_scope:'department' }; showForm.value = true }
+function edit(u){ formError.value = ''; form.value = {...u, account_type:u.role === 'super_admin' ? 'super_admin' : 'regular', role:u.role === 'super_admin' ? '' : u.role, permissions:[...(u.permissions || [])], password:''}; showForm.value = true }
 async function save(){
   formError.value = ''; try {
   const email=(form.value.email || '').trim()
   if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { formError.value='请输入有效的邮箱地址'; return }
   form.value.email=email || null
-  if (form.value.id) await api.put(`/auth/users/${form.value.id}`, form.value)
-  else await api.post('/auth/users', form.value)
+  if(form.value.account_type !== 'super_admin' && form.value.role.trim() === 'super_admin') { formError.value='请通过账号身份选择超级管理员'; return }
+  const payload={...form.value,role:form.value.account_type === 'super_admin' ? 'super_admin' : form.value.role.trim(), data_scope:form.value.account_type === 'super_admin' ? 'all' : form.value.data_scope}
+  delete payload.account_type
+  if (form.value.id) await api.put(`/auth/users/${form.value.id}`, payload)
+  else await api.post('/auth/users', payload)
   showForm.value = false
   load()
   } catch(e) { const detail=e.response?.data?.detail; formError.value = typeof detail === 'string' ? detail : (Array.isArray(detail) && detail.some(item => item.loc?.includes('email')) ? '请输入有效的邮箱地址' : '保存失败，请检查填写内容后重试') }

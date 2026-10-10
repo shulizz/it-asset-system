@@ -1,4 +1,4 @@
-"""Canonical configurable permissions. Templates never imply extra grants."""
+"""Permissions explicitly assigned per user by a super administrator."""
 ALL_PERMISSIONS = [
     ('assets', '查看资产档案'), ('assets_write', '新增和编辑资产'),
     ('import', '导入数据'), ('export', '导出数据'),

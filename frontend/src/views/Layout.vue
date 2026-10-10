@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="app">
     <button v-if="mobileNavOpen" class="nav-overlay" aria-label="关闭导航" @click="mobileNavOpen = false"></button>
     <aside id="app-navigation" class="sidebar" :class="{ open: mobileNavOpen }">
@@ -31,7 +31,6 @@
         <router-link v-if="perms.includes('approval')" to="/delete-approval" class="nav-item"><span class="nav-dot"></span>审批中心</router-link>
         <router-link v-if="perms.includes('departments') && (user.role === 'super_admin' || user.data_scope === 'all')" to="/departments" class="nav-item"><span class="nav-dot"></span>部门管理</router-link>
         <router-link v-if="perms.includes('users')" to="/users" class="nav-item"><span class="nav-dot"></span>用户权限</router-link>
-        <router-link v-if="perms.includes('roles')" to="/roles" class="nav-item"><span class="nav-dot"></span>角色权限</router-link>
         <router-link v-if="perms.includes('logs') && (user.role === 'super_admin' || user.data_scope === 'all')" to="/logs" class="nav-item"><span class="nav-dot"></span>操作日志</router-link>
       </nav>
       <div class="sidebar-footer">
@@ -64,7 +63,7 @@ import api from '../api'
 
 const mobileNavOpen = ref(false)
 const route = useRoute()
-const pageNames = { dashboard: '工作台', 'assets-it': 'IT 设备档案', 'assets-phone': '手机设备档案', 'assets-medical': '医疗设备档案', 'phone-numbers': '电话号码', transfer: '设备流转', scrap: '报废管理', reports: '报表统计', apply: '设备申请', idle: '空闲设备', scrapped: '报废设备', 'delete-approval': '审批中心', departments: '部门管理', users: '用户权限', roles: '角色权限', logs: '操作日志', wechat: '微信账号' }
+const pageNames = { dashboard: '工作台', 'assets-it': 'IT 设备档案', 'assets-phone': '手机设备档案', 'assets-medical': '医疗设备档案', 'phone-numbers': '电话号码', transfer: '设备流转', scrap: '报废管理', reports: '报表统计', apply: '设备申请', idle: '空闲设备', scrapped: '报废设备', 'delete-approval': '审批中心', departments: '部门管理', users: '用户权限', logs: '操作日志', wechat: '微信账号' }
 const pageTitle = computed(() => pageNames[route.path.split('/')[1]] || '工作台')
 const scopeText = computed(() => user.value.role === 'super_admin' || user.value.data_scope === 'all' ? '全部部门' : (user.value.department || '当前权限范围'))
 

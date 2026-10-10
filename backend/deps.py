@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from database import get_db
-from models import User, Role
+from models import User
 import json
 import os
 from permissions import PERMISSION_KEYS, GLOBAL_PERMISSIONS
@@ -34,7 +34,7 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security), db
 def get_user_permissions(user: User, db: Session) -> list:
     """获取用户权限列表"""
     if user.role == "super_admin":
-        return sorted(PERMISSION_KEYS | {"users", "roles"})
+        return sorted(PERMISSION_KEYS | {"users"})
     if user.permissions is not None:
         try:
             permissions = json.loads(user.permissions)
@@ -42,14 +42,6 @@ def get_user_permissions(user: User, db: Session) -> list:
                 return []
             return sorted(PERMISSION_KEYS.intersection(p for p in permissions if isinstance(p, str)))
         except (ValueError, TypeError):
-            return []
-    role_obj = db.query(Role).filter(Role.id == user.role_id).first() if user.role_id else None
-    if not role_obj:
-        role_obj = db.query(Role).filter(Role.name == user.role).first()
-    if role_obj and role_obj.permissions:
-        try:
-            return sorted(PERMISSION_KEYS.intersection(json.loads(role_obj.permissions)))
-        except Exception:
             return []
     return []
 

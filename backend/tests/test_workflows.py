@@ -108,16 +108,46 @@ class WorkflowTests(unittest.TestCase):
             'target_user': '接收人', 'target_department_id': 1 if user_id != 4 else 2,
         })
 
-    def test_read_only_template_never_expands(self):
-        response = self.client.post('/api/auth/roles', headers=self.headers(1), json={'name': '只读', 'permissions': ['assets']})
-        self.assertEqual(response.status_code, 200, response.text)
-        roles = self.client.get('/api/auth/roles', headers=self.headers(1)).json()
-        self.assertEqual(roles[0]['permissions'], ['assets'])
+    def test_role_label_never_assigns_permissions(self):
+        with SessionLocal() as db:
+            db.add(Role(name='只读',permissions=json.dumps(['assets','assets_write'])));db.commit()
         response = self.client.post('/api/auth/users', headers=self.headers(1), json={
             'username': 'reader', 'password': 'reader-password-123', 'name': '只读用户',
             'role': '只读', 'department': '甲部门', 'data_scope': 'department'})
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()['permissions'], ['assets'])
+        self.assertEqual(response.json()['permissions'], [])
+        self.assertIsNone(response.json()['role_id'])
+        user_id=response.json()['id']
+        payload={'username':'reader','name':'只读用户','role':'自定义岗位','department':'甲部门','data_scope':'department','permissions':['assets']}
+        response=self.client.put(f'/api/auth/users/{user_id}',headers=self.headers(1),json=payload)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['role'],'自定义岗位')
+        self.assertEqual(response.json()['permissions'],['assets'])
+        payload.pop('permissions');payload['role']='修改名称'
+        self.assertEqual(self.client.put(f'/api/auth/users/{user_id}',headers=self.headers(1),json=payload).json()['permissions'],['assets'])
+
+    def test_retired_roles_and_superadmin_only_assignment(self):
+        for method,path in [('get','/api/auth/roles'),('post','/api/auth/roles'),('put','/api/auth/roles/1'),('delete','/api/auth/roles/1')]:
+            self.assertEqual(getattr(self.client,method)(path,headers=self.headers(1)).status_code,410)
+            self.assertEqual(getattr(self.client,method)(path,headers=self.headers(3)).status_code,403)
+        self.assertNotIn('roles',self.client.get('/api/auth/me',headers=self.headers(1)).json()['permissions'])
+        payload={'username':'applicant','name':'同名','role':'超级管理员','department':'甲部门','data_scope':'all','permissions':['assets']}
+        self.assertEqual(self.client.put('/api/auth/users/2',headers=self.headers(3),json=payload).status_code,403)
+        self.assertEqual(self.client.put('/api/auth/users/2',headers=self.headers(1),json=payload).status_code,200)
+        self.assertEqual(self.client.get('/api/auth/users',headers=self.headers(2)).status_code,403)
+
+    def test_legacy_template_is_snapshotted_once_then_decoupled(self):
+        from main import seed_admin
+        from deps import get_user_permissions
+        with SessionLocal() as db:
+            legacy=Role(name='旧角色',permissions=json.dumps(['assets']));db.add(legacy);db.flush()
+            user=db.get(User,2);user.role='旧角色';user.role_id=legacy.id;user.permissions=None;db.commit()
+            self.assertEqual(get_user_permissions(user,db),[])
+        seed_admin()
+        with SessionLocal() as db:
+            user=db.get(User,2);self.assertEqual(get_user_permissions(user,db),['assets'])
+            db.get(Role,user.role_id).permissions=json.dumps(['assets','assets_write']);db.commit()
+            self.assertEqual(get_user_permissions(user,db),['assets'])
 
     def test_global_permissions_rejected_for_department_scope(self):
         for permission in ['departments', 'logs', 'wechat']:
