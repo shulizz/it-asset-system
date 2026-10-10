@@ -97,6 +97,11 @@ class UserIn(BaseModel):
             raise ValueError('角色名称最多50个字符')
         return value
 
+    @field_validator('department')
+    @classmethod
+    def normalize_department(cls, value):
+        return value.strip() or None if value is not None else None
+
 @router.get("/users")
 def list_users(db: Session = Depends(get_db), user = Depends(require_super_admin)):
     return [user_view(item, db) for item in db.query(User).all()]

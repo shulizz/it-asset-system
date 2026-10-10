@@ -26,8 +26,9 @@ with engine.connect() as conn:
             if column_name not in existing:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column}"))
     for table in ["users", "it_assets", "phone_assets", "medical_assets", "phone_numbers"]:
-        conn.execute(text(f"UPDATE {table} SET department=NULL WHERE trim(coalesce(department, ''))=''"))
-        conn.execute(text(f"INSERT OR IGNORE INTO departments(name, note) SELECT DISTINCT trim(department), '历史数据自动迁移' FROM {table} WHERE department IS NOT NULL"))
+        if table != 'users':
+            conn.execute(text(f"UPDATE {table} SET department=NULL WHERE trim(coalesce(department, ''))=''"))
+        conn.execute(text(f"INSERT OR IGNORE INTO departments(name, note) SELECT DISTINCT trim(department), '历史数据自动迁移' FROM {table} WHERE department IS NOT NULL AND trim(department)<>''"))
         conn.execute(text(f"UPDATE {table} SET department_id=(SELECT id FROM departments WHERE departments.name={table}.department) WHERE department_id IS NULL AND department IS NOT NULL"))
     conn.execute(text("UPDATE users SET data_scope=CASE WHEN role IN ('super_admin','asset_admin') THEN 'all' ELSE 'department' END WHERE data_scope IS NULL"))
     conn.commit()
