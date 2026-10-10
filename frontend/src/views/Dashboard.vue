@@ -41,9 +41,7 @@
     <div v-if="canSeeMedical" class="panel" style="margin-bottom:20px;border-left:4px solid #ef4444">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:12px">
         <h3 style="color:#dc2626">医疗设备到期提醒（30天内）</h3>
-        <button class="btn btn-outline" @click="sendEmail" :disabled="sending" style="font-size:12px;padding:6px 12px">
-          {{ sending ? '发送中...' : '发送提醒邮件' }}
-        </button>
+        <ExpiryEmailDialog v-if="canSendEmail" />
       </div>
       <div v-if="expiringList.length === 0" style="color:#94a3b8;padding:12px 0;text-align:center">近期无设备到期</div>
       <div v-else>
@@ -75,10 +73,12 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import api from '../api'
+import ExpiryEmailDialog from '../components/ExpiryEmailDialog.vue'
 
 const user = computed(() => JSON.parse(localStorage.getItem('user') || '{}'))
 const perms = computed(() => user.value.permissions || [])
 const canSeeMedical = computed(() => perms.value.includes('assets'))
+const canSendEmail = computed(() => perms.value.includes('assets_write') && (user.value.role === 'super_admin' || user.value.data_scope === 'all'))
 
 const stats = ref({ total: 0, inUse: 0, idle: 0 })
 const pendingList = ref([])
@@ -90,19 +90,6 @@ const deptCount = ref(0)
 const wechatCount = ref(0)
 const pendingCount = ref(0)
 const expiringList = ref([])
-const sending = ref(false)
-
-async function sendEmail() {
-  sending.value = true
-  try {
-    const r = await api.post('/assets/medical/send-expiry-email?days=30')
-    alert(r.data.message)
-  } catch(e) {
-    alert('发送失败: ' + (e.response?.data?.detail || e.message))
-  }
-  sending.value = false
-}
-
 async function safeGet(url) {
   try { const r = await api.get(url); return r.data || [] } catch(e) { return [] }
 }

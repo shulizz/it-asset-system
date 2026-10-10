@@ -36,14 +36,13 @@ async function main() {
     }}, URL: {createObjectURL:()=> 'blob:report', revokeObjectURL:()=>{}},
     document: {createElement:()=>({click(){downloads.push(this.download)}})},
     setTimeout: fn=>fn(), alert: message=>{throw Error(message)}
-  }, ['total','canExport','deptStats','exportCSV'])
+  }, ['total','canExport','deptStats'])
   await report.mounted[0]()
   assert.equal(report.state.total.value.it,1)
   assert.equal(report.state.total.value.wechat,'无权限')
   assert.equal(calls.includes('/wechat'),false)
   assert.equal(report.state.canExport.value,true)
-  await report.state.exportCSV()
-  assert.equal(downloads.length,1)
+  assert.match(fs.readFileSync(path.join(root,'views/Reports.vue'),'utf8'), /endpoint="\/reports\/export"/)
 
   const partial=component('views/Reports.vue', {api:{get:async url=>{
     if(url==='/auth/me') return {data:{permissions:['reports','wechat'],data_scope:'all'}}

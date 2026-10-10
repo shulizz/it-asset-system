@@ -24,6 +24,8 @@ from models import User, Role, Department, ITAsset, ScrapRequest, DeleteRequest,
 from routers.auth import create_token, pwd_context
 from credential_crypto import encrypt_credential, decrypt_credential
 from migrations import migrate_workflow
+from unittest.mock import patch
+from models import MedicalAsset
 
 
 class WorkflowTests(unittest.TestCase):
@@ -53,6 +55,45 @@ class WorkflowTests(unittest.TestCase):
         with SessionLocal() as db:
             u = db.get(User, user_id)
             return {'Authorization': 'Bearer ' + create_token(u.username, u.token_version or 0, u.id)}
+
+    def test_user_email_create_update_clear_and_legacy_preserve(self):
+        payload={'username':'mailuser','password':'testing-password-123','name':'邮箱用户','role':'','department':'甲部门','data_scope':'department','permissions':[], 'email':' test@qq.com '}
+        response=self.client.post('/api/auth/users',headers=self.headers(1),json=payload)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['email'],'test@qq.com')
+        user_id=response.json()['id']
+        payload.pop('email');payload.pop('password')
+        response=self.client.put(f'/api/auth/users/{user_id}',headers=self.headers(1),json=payload)
+        self.assertEqual(response.json()['email'],'test@qq.com')
+        payload['email']='not-an-email'
+        self.assertEqual(self.client.put(f'/api/auth/users/{user_id}',headers=self.headers(1),json=payload).status_code,422)
+        payload['email']=''
+        self.assertIsNone(self.client.put(f'/api/auth/users/{user_id}',headers=self.headers(1),json=payload).json()['email'])
+
+    def test_expiry_recipient_permissions_and_selected_delivery(self):
+        with SessionLocal() as db:
+            db.get(User,2).email='selected@qq.com'
+            db.get(User,4).email='unselected@qq.com'
+            db.add(MedicalAsset(asset_number='MAIL-TEST',name='<script>测试</script>',expiry_date=date.today(),status='in_use'))
+            db.commit()
+        self.assertEqual(self.client.get('/api/assets/medical/notice-recipients',headers=self.headers(3)).status_code,403)
+        self.assertEqual(self.client.get('/api/assets/medical/notice-recipients').status_code,403)
+        response=self.client.get('/api/assets/medical/notice-recipients',headers=self.headers(1))
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual({u['id'] for u in response.json()['users']},{2,4})
+        with patch('notifier.send_email',return_value={'success':True,'message':'已发送'}) as mock:
+            response=self.client.post('/api/assets/medical/send-expiry-email',headers=self.headers(1),json={'recipient_user_ids':[2,2]})
+            self.assertEqual(response.status_code,200,response.text)
+            self.assertEqual(mock.call_args.args[0],['selected@qq.com'])
+            self.assertIn('&lt;script&gt;',mock.call_args.args[2])
+            self.assertNotIn('<script>',mock.call_args.args[2])
+        with SessionLocal() as db:
+            db.get(User,2).is_active=0;db.commit()
+        with patch('notifier.send_email') as mock:
+            response=self.client.post('/api/assets/medical/send-expiry-email',headers=self.headers(1),json={'recipient_user_ids':[2]})
+            self.assertEqual(response.status_code,400)
+            mock.assert_not_called()
+        self.assertEqual(self.client.post('/api/assets/medical/send-expiry-email',headers=self.headers(1),json={'recipient_user_ids':[]}).status_code,422)
 
     def asset(self, department_id=1, status='idle', number=None):
         with SessionLocal() as db:

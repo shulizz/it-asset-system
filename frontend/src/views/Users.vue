@@ -6,10 +6,11 @@
     </div>
     <div class="panel">
       <table>
-        <thead><tr><th>用户名</th><th>姓名</th><th>角色</th><th>部门</th><th>数据范围</th><th>已分配权限</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>用户名</th><th>姓名</th><th>邮箱</th><th>角色</th><th>部门</th><th>数据范围</th><th>已分配权限</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="u in list" :key="u.id">
             <td>{{ u.username }}</td><td>{{ u.name }}</td>
+            <td>{{ u.email || '未填写' }}</td>
             <td><span class="badge" :class="roleClass(u.role)">{{ roleText(u.role) }}</span></td>
             <td>{{ u.department || '—' }}</td>
             <td>{{ u.role === "super_admin" || u.data_scope === "all" ? "全部部门" : "仅本部门" }}</td>
@@ -36,7 +37,7 @@
           <tr v-for="b in backups" :key="b.name">
             <td>{{ b.name }}</td>
             <td>{{ (b.size/1024).toFixed(1) }} KB</td>
-            <td><a @click="download(b.name)" style="color:#0d9488;cursor:pointer">下载</a></td>
+            <td><FileDownloadButton :endpoint="`/backup/download/${encodeURIComponent(b.name)}`" :filename="b.name" label="下载" /></td>
           </tr>
         </tbody>
       </table>
@@ -47,6 +48,7 @@
         <h3>{{ form.id ? '编辑用户' : '新增用户' }}</h3>
         <div class="form-row"><label>用户名</label><input v-model="form.username" :disabled="form.id"></div>
         <div class="form-row"><label>姓名</label><input v-model="form.name"></div>
+        <div class="form-row"><label for="user-email">邮箱（用于接收设备到期提醒）</label><input id="user-email" v-model="form.email" type="email" maxlength="254" placeholder="如：name@qq.com"><p style="font-size:12px;color:#64748b;margin-top:5px">可选；填写后可在发送提醒时选择该用户。</p></div>
         <div class="form-row"><label>密码</label><input v-model="form.password" type="password" :placeholder="form.id ? '不修改请留空' : '至少10个字符'"></div>
         <div class="form-row"><label>角色</label>
           <select v-model="form.role" @change="applyRoleTemplate">
@@ -87,9 +89,10 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '../api'
+import FileDownloadButton from '../components/FileDownloadButton.vue'
 const list = ref([]), showForm = ref(false), deptList = ref([]), backups = ref([]), roleList = ref([])
 const permissionList = ref([]), formError = ref('')
-const form = ref({ id:null, username:'', name:'', password:'', role:'', department:'' })
+const form = ref({ id:null, username:'', name:'', email:'', password:'', role:'', department:'' })
 async function load(){
   const [u, d, b, r, p] = await Promise.all([api.get('/auth/users'), api.get('/departments'), api.get('/backup/list'), api.get('/auth/roles'), api.get('/auth/permissions')])
   list.value = u.data
@@ -102,21 +105,20 @@ async function backupNow(){
   await api.post('/backup/')
   await load()
 }
-async function download(name){
-  const res = await api.get(`/backup/download/${encodeURIComponent(name)}`, { responseType: 'blob' })
-  const url = URL.createObjectURL(res.data), a = document.createElement('a')
-  a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-function openForm(){ formError.value = ''; form.value = { id:null, username:'', name:'', password:'', role:'', department:'', permissions:[], data_scope:'department' }; showForm.value = true }
+
+function openForm(){ formError.value = ''; form.value = { id:null, username:'', name:'', email:'', password:'', role:'', department:'', permissions:[], data_scope:'department' }; showForm.value = true }
 function edit(u){ formError.value = ''; form.value = {...u, permissions:[...(u.permissions || [])], password:''}; showForm.value = true }
 function applyRoleTemplate(){ const role = roleList.value.find(r => r.name === form.value.role); form.value.permissions = [...(role?.permissions || [])] }
 async function save(){
   formError.value = ''; try {
+  const email=(form.value.email || '').trim()
+  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { formError.value='请输入有效的邮箱地址'; return }
+  form.value.email=email || null
   if (form.value.id) await api.put(`/auth/users/${form.value.id}`, form.value)
   else await api.post('/auth/users', form.value)
   showForm.value = false
   load()
-  } catch(e) { formError.value = e.response?.data?.detail || '保存失败' }
+  } catch(e) { const detail=e.response?.data?.detail; formError.value = typeof detail === 'string' ? detail : (Array.isArray(detail) && detail.some(item => item.loc?.includes('email')) ? '请输入有效的邮箱地址' : '保存失败，请检查填写内容后重试') }
 }
 async function toggle(u){ await api.put(`/auth/users/${u.id}/toggle`); load() }
 async function del(u){

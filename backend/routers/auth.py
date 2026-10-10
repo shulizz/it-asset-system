@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+import re
 from datetime import datetime, timedelta
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -41,6 +42,7 @@ def login(req: LoginRequest, db: Session = Depends(get_write_db)):
 def user_view(user, db):
     return {
         "id": user.id, "username": user.username, "name": user.name,
+        "email": user.email,
         "role": user.role, "role_id": user.role_id,
         "department": user.department, "department_id": user.department_id,
         "is_active": user.is_active, "data_scope": user.data_scope or "department",
@@ -71,10 +73,21 @@ class UserIn(BaseModel):
     username: str
     password: Optional[str] = None
     name: str
+    email: Optional[str] = None
     role: str = "asset_admin"
     department: Optional[str] = None
     permissions: Optional[list[str]] = None
     data_scope: Literal["all", "department"] = "department"
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, value):
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        if len(value) > 254 or not re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+", value):
+            raise ValueError('请输入有效的邮箱地址')
+        return value
 
 @router.get("/users")
 def list_users(db: Session = Depends(get_db), user = Depends(require_super_admin)):
@@ -96,7 +109,7 @@ def create_user(data: UserIn, db: Session = Depends(get_write_db), current_user 
     if data.permissions is None:
         data.permissions = get_user_permissions(User(role=data.role, role_id=role.id if role else None, permissions=None), db)
     validate_access(data)
-    new_user = User(username=data.username, name=data.name, role=data.role,
+    new_user = User(username=data.username, name=data.name, email=data.email, role=data.role,
                 role_id=role.id if role else None, department=data.department,
                 department_id=department.id if department else None,
                 permissions=json.dumps(data.permissions if data.permissions is not None else get_user_permissions(User(role=data.role, role_id=role.id if role else None, permissions=None), db)),
@@ -118,6 +131,8 @@ def update_user(user_id: int, data: UserIn, db: Session = Depends(get_write_db),
         data.permissions = get_user_permissions(user, db)
     validate_access(data)
     user.name = data.name
+    if 'email' in data.model_fields_set:
+        user.email = data.email
     role = None if data.role == "super_admin" else db.query(Role).filter(Role.name == data.role).first()
     if data.role not in ("super_admin", "") and not role:
         raise HTTPException(400, "角色不存在")

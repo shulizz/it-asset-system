@@ -14,7 +14,7 @@
             <td><span class="badge" :class="statusClass(item.status)">{{ statusText(item.status) }}</span></td>
             <td>{{ item.submit_date || '—' }}</td>
             <td>
-              <a @click="askDelete(item)" style="color:#ef4444;cursor:pointer">删除</a>
+              <button type="button" class="delete-action" v-if="canWriteAssets" @click="askDelete(item)" style="color:#ef4444;cursor:pointer">申请删除</button>
             </td>
           </tr>
         </tbody>
@@ -52,11 +52,15 @@
         </div>
       </div>
     </div>
+  <DeleteRequestDialog :target="deleteTarget" @close="deleteTarget = null" />
   </div>
 </template>
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import api from '../api'
+import DeleteRequestDialog from '../components/DeleteRequestDialog.vue'
+const deleteTarget = ref(null)
+const canWriteAssets = computed(() => (JSON.parse(localStorage.getItem('user') || '{}').permissions || []).includes('assets_write'))
 const list = ref([]), showForm = ref(false)
 const deptList = ref([]), assetOptions = ref([])
 const form = ref({ assetType:'', assetId:null, asset_desc:'', applicant:'', department:'', reason:'' })
@@ -90,12 +94,7 @@ async function save(){
   form.value = { assetType:'', assetId:null, asset_desc:'', applicant:'', department:'', reason:'' }
   load()
 }
-async function askDelete(item){
-  const reason = prompt(`申请删除报废申请 ${item.request_number}，请输入原因：`)
-  if (!reason) return
-  await api.post('/delete-request', { table_name:'scrap_requests', record_id:item.id, record_desc:item.request_number, reason:reason })
-  alert('删除申请已提交，等待管理员审批')
-}
+function askDelete(item) { deleteTarget.value = { table_name: 'scrap_requests', record_id: item.id, record_desc: item.request_number } }
 function reject(item){ alert('驳回功能待开发') }
 function statusClass(s){ return {pending_approval:'amber',approved:'green',disposed:'gray',archived:'gray'}[s]||'gray' }
 function statusText(s){ return {pending_approval:'待审批',approved:'已批准',disposed:'已处置',archived:'已归档'}[s]||s }

@@ -1,7 +1,7 @@
 <template>
   <div style="display:flex;gap:8px">
-    <button v-if="canImport" class="ie-btn" @click="downloadTemplate" title="下载Excel导入模板">下载模板</button>
-    <button v-if="canExport" class="ie-btn" @click="exportFile">导出</button>
+    <FileDownloadButton v-if="canImport" :endpoint="`/ie/${module}/template`" :filename="`${moduleName}_导入模板.xlsx`" label="下载模板" button-class="btn btn-outline" />
+    <FileDownloadButton v-if="canExport" :endpoint="`/ie/${module}/export`" :filename="`${moduleName}.xlsx`" button-class="btn btn-outline" />
     <button v-if="canImport" class="ie-btn primary" @click="$refs.fileInput.click()">导入</button>
     <input ref="fileInput" type="file" accept=".xlsx" style="display:none" @change="onImport">
   </div>
@@ -10,9 +10,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
-import { getBaseURL } from '../api'
+import FileDownloadButton from './FileDownloadButton.vue'
 
 const props = defineProps({ module: { type: String, required: true } })
+const moduleName = computed(() => ({it:'IT设备',phone:'手机设备',medical:'医疗设备',number:'电话号码',wechat:'微信账号',department:'部门'}[props.module] || '资产表格'))
 const fileInput = ref(null)
 const currentUser = ref({ permissions: [] })
 const modulePermission = computed(() => props.module === 'department' ? 'departments' : props.module === 'wechat' ? 'wechat' : 'assets')
@@ -22,45 +23,6 @@ const canImport = computed(() => canUseModule.value && currentUser.value.permiss
 onMounted(async () => {
   try { currentUser.value = (await api.get('/auth/me')).data } catch {}
 })
-
-function authHeaders() {
-  const token = localStorage.getItem('token')
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
-function exportFile() {
-  const token = localStorage.getItem('token')
-  const base = getBaseURL()
-  fetch(`${base}/ie/${props.module}/export`, { headers: authHeaders() })
-    .then(r => { if (!r.ok) throw new Error('请求失败'); return r.blob() })
-    .then(blob => {
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = ''
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-    })
-    .catch(() => alert('导出失败'))
-}
-
-function downloadTemplate() {
-  const base = getBaseURL()
-  fetch(`${base}/ie/${props.module}/template`, { headers: authHeaders() })
-    .then(r => { if (!r.ok) throw new Error('请求失败'); return r.blob() })
-    .then(blob => {
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = ''
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-    })
-}
 
 async function onImport(e) {
   const file = e.target.files[0]

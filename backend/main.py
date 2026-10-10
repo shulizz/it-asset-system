@@ -13,7 +13,7 @@ Base.metadata.create_all(bind=engine)
 from sqlalchemy import text
 with engine.connect() as conn:
     id_columns = {
-        "users": ["role_id INTEGER", "department_id INTEGER", "permissions TEXT", "data_scope VARCHAR(20)"],
+        "users": ["role_id INTEGER", "department_id INTEGER", "permissions TEXT", "data_scope VARCHAR(20)", "email VARCHAR(254)"],
         "it_assets": ["department_id INTEGER"],
         "phone_assets": ["department_id INTEGER"],
         "medical_assets": ["department_id INTEGER"],

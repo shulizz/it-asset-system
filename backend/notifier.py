@@ -1,5 +1,7 @@
 """邮件通知模块：发送医疗设备到期提醒邮件"""
 import smtplib
+import os
+from html import escape
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, date, timedelta
@@ -7,21 +9,22 @@ from sqlalchemy.orm import Session
 from models import MedicalAsset
 
 # ===== SMTP 配置（需要改成你自己的邮箱）=====
-SMTP_HOST = "smtp.qq.com"       # 如 smtp.qq.com / smtp.163.com / smtp.exmail.qq.com
-SMTP_PORT = 465                 # SSL 端口一般 465
-SMTP_USER = ""                  # 发件邮箱地址，如 xxx@qq.com
-SMTP_PASS = ""                  # 邮箱授权码（不是登录密码），QQ邮箱在设置->账户里开启SMTP后获取
-SMTP_FROM = ""                  # 发件人名称/邮箱，默认和 SMTP_USER 相同
+SMTP_HOST = os.environ.get('IT_ASSET_SMTP_HOST', 'smtp.qq.com')
+SMTP_PORT = int(os.environ.get('IT_ASSET_SMTP_PORT', '465'))
+SMTP_USER = os.environ.get('IT_ASSET_SMTP_USER', '')
+SMTP_PASS = os.environ.get('IT_ASSET_SMTP_PASS', '')
+SMTP_FROM = os.environ.get('IT_ASSET_SMTP_FROM', '')
 # ==========================================
 
 # 到期提醒接收人邮箱（逗号分隔）
-NOTIFY_RECIPIENTS = []
+def smtp_configured():
+    return bool(SMTP_USER and SMTP_PASS)
 
 
 def send_email(to_list: list, subject: str, content: str) -> dict:
     """发送邮件，返回 {success, message}"""
     if not SMTP_USER or not SMTP_PASS:
-        return {"success": False, "message": "SMTP未配置，请先在 backend/notifier.py 填写邮箱授权码"}
+        return {"success": False, "message": "服务器尚未配置发件邮箱及SMTP授权码，请联系超级管理员完成配置"}
     if not to_list:
         return {"success": False, "message": "未配置接收人邮箱"}
 
@@ -32,13 +35,14 @@ def send_email(to_list: list, subject: str, content: str) -> dict:
     msg.attach(MIMEText(content, "html", "utf-8"))
 
     try:
-        server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15)
-        server.login(SMTP_USER, SMTP_PASS)
-        server.sendmail(SMTP_USER, to_list, msg.as_string())
-        server.quit()
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+            server.login(SMTP_USER, SMTP_PASS)
+            refused = server.sendmail(SMTP_USER, to_list, msg.as_string())
+            if refused:
+                return {"success": False, "message": f"部分邮箱投递失败：{len(refused)}个，请检查收件邮箱后重试"}
         return {"success": True, "message": f"已发送给 {len(to_list)} 个邮箱"}
-    except Exception as e:
-        return {"success": False, "message": f"邮件发送失败: {str(e)}"}
+    except Exception:
+        return {"success": False, "message": "邮件发送失败，请检查发件邮箱授权码、SMTP服务和服务器网络"}
 
 
 def get_expiring_medical(db: Session, days: int = 30, user=None) -> list:
@@ -51,7 +55,7 @@ def get_expiring_medical(db: Session, days: int = 30, user=None) -> list:
         query = scope_query(query, MedicalAsset, user)
     assets = query.filter(
         MedicalAsset.expiry_date.isnot(None),
-        MedicalAsset.status != "scrapped",
+        MedicalAsset.status.notin_(["scrapped", "archived"]),
     ).all()
     result = []
     for a in assets:
@@ -73,7 +77,7 @@ def get_expiring_medical(db: Session, days: int = 30, user=None) -> list:
     return result
 
 
-def send_expiry_notice(db: Session, days: int = 30) -> dict:
+def send_expiry_notice(db: Session, days: int = 30, recipients=None) -> dict:
     """发送到期提醒邮件"""
     expiring = get_expiring_medical(db, days)
     if not expiring:
@@ -81,6 +85,7 @@ def send_expiry_notice(db: Session, days: int = 30) -> dict:
 
     rows = ""
     for e in expiring:
+        e = {key: escape(str(value)) if key != 'days_left' else value for key, value in e.items()}
         if e["days_left"] < 0:
             tag = f'<span style="color:#dc2626;font-weight:bold">已过期{abs(e["days_left"])}天</span>'
         else:
@@ -116,6 +121,6 @@ def send_expiry_notice(db: Session, days: int = 30) -> dict:
     </div>
     """
     subject = f"【到期提醒】{len(expiring)}台医疗设备{days}天内到期"
-    result = send_email(NOTIFY_RECIPIENTS, subject, html)
+    result = send_email(recipients or [], subject, html)
     result["count"] = len(expiring)
     return result

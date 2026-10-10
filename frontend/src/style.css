@@ -2,6 +2,7 @@
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",system-ui,sans-serif; background:var(--canvas); color:var(--ink); font-size:14px; }
 button,input,select,textarea { font:inherit; }
+.delete-action { border:0; background:transparent; padding:2px 0; font-size:13px; }
 button:disabled { opacity:.55; cursor:not-allowed; }
 a { text-underline-offset:3px; }
 :focus-visible { outline:2px solid var(--primary); outline-offset:3px; }

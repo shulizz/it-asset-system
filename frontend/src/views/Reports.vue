@@ -1,6 +1,6 @@
 ﻿<template>
   <div>
-    <h2 style="margin-bottom:20px">报表统计 <button v-if="canExport" class="btn-export" @click="exportCSV">导出Excel</button></h2>
+    <h2 style="margin-bottom:20px;display:flex;gap:12px;align-items:center">报表统计 <FileDownloadButton v-if="canExport" endpoint="/reports/export" filename="资产报表.xlsx" label="导出Excel" button-class="btn btn-primary" /></h2>
     <p v-if="loadError" style="color:#b45309">{{ loadError }}</p>
     <div class="stats">
       <div class="card"><div class="num">{{ total.it }}</div><div class="label">IT设备</div></div>
@@ -45,6 +45,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
+import FileDownloadButton from '../components/FileDownloadButton.vue'
 const currentUser = ref({permissions: []})
 const canExport = computed(() => currentUser.value.permissions.includes('export'))
 const loadError = ref('')
@@ -53,14 +54,7 @@ const status = ref({ inUse:0, idle:0, scrapped:0 })
 const deptCount = ref(0)
 const deptStats = ref([])
 const idleList = ref([])
-async function exportCSV(){
-  try {
-    const res = await api.get('/reports/export', {responseType: 'blob'})
-    const url = URL.createObjectURL(res.data), a = document.createElement('a')
-    a.href = url; a.download = `资产报表_${new Date().toISOString().slice(0,10)}.xlsx`
-    a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
-  } catch { alert('报表导出失败，请检查权限或稍后重试') }
-}
+
 function statusText(s){ return {in_use:'在用',idle:'闲置',scrapped:'已报废'}[s]||s }
 function cardText(t){ return {main:'主卡',sub:'副卡',landline:'座机'}[t]||t }
 function numStatusText(s){ return {in_use:'在用',idle:'闲置',cancelled:'注销',unused:'不再使用'}[s]||s }

@@ -31,6 +31,7 @@ class User(Base):
     username = Column(String(50), unique=True, index=True, nullable=False)
     password_hash = Column(String(200), nullable=False)
     name = Column(String(50), nullable=False)
+    email = Column(String(254), nullable=True)
     role = Column(String(50), nullable=False)  # 角色名，关联 Role.name，或 super_admin
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=True, index=True)
     permissions = Column(Text, nullable=True)

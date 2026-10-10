@@ -231,12 +231,35 @@ def list_expiring(days: int = 30, db: Session = Depends(get_db), current_user: U
     from notifier import get_expiring_medical
     return get_expiring_medical(db, days, current_user)
 
-@router.post("/medical/send-expiry-email")
-def send_expiry_email(days: int = 30, db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
-    if current_user.role != 'super_admin' and current_user.data_scope != 'all':
+class ExpiryEmailIn(BaseModel):
+    recipient_user_ids: list[int] = Field(min_length=1, max_length=100)
+
+
+def require_global_notice_sender(user):
+    if user.role != 'super_admin' and user.data_scope != 'all':
         raise HTTPException(403, '发送全局到期提醒需要全部部门数据范围')
+
+
+@router.get("/medical/notice-recipients")
+def notice_recipients(db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
+    require_global_notice_sender(current_user)
+    from notifier import smtp_configured
+    users = db.query(User).filter(User.is_active == 1, User.email.isnot(None), User.email != '').order_by(User.id).all()
+    return {'users': [{'id': u.id, 'name': u.name, 'email': u.email} for u in users], 'smtp_configured': smtp_configured()}
+
+
+@router.post("/medical/send-expiry-email")
+def send_expiry_email(data: ExpiryEmailIn, days: int = 30, db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
+    require_global_notice_sender(current_user)
+    if not 1 <= days <= 365:
+        raise HTTPException(400, '提醒天数必须在1至365之间')
+    ids = set(data.recipient_user_ids)
+    users = db.query(User).filter(User.id.in_(ids), User.is_active == 1, User.email.isnot(None), User.email != '').all()
+    if len(users) != len(ids):
+        raise HTTPException(400, '所选用户已停用、被删除或未填写邮箱，请刷新收件人列表')
+    recipients = list(dict.fromkeys(u.email for u in users))
     from notifier import send_expiry_notice
-    result = send_expiry_notice(db, days)
+    result = send_expiry_notice(db, days, recipients)
     db.add(OperationLog(user=current_user.name, module="邮件提醒", action="发送到期提醒",
                         detail=f"到期提醒邮件，{result.get('count',0)}台设备: {result.get('message','')}"))
     db.commit()

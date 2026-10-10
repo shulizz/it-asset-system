@@ -30,7 +30,7 @@
             <td><span class="badge" :class="typeClass(item.card_type)">{{ typeText(item.card_type) }}</span></td>
             <td>{{ item.department || '—' }}</td><td>{{ item.user_name || '—' }}</td>
             <td><span class="badge" :class="statusClass(item.status)">{{ statusText(item.status) }}</span></td>
-            <td><a v-if="canWriteAssets" @click="edit(item)" style="color:#2563eb;cursor:pointer;margin-right:10px">编辑</a><a v-if="canWriteAssets" @click="askDelete(item)" style="color:#ef4444;cursor:pointer">申请删除</a></td>
+            <td><a v-if="canWriteAssets" @click="edit(item)" style="color:#2563eb;cursor:pointer;margin-right:10px">编辑</a><button type="button" class="delete-action" v-if="canWriteAssets" @click="askDelete(item)" style="color:#ef4444;cursor:pointer">申请删除</button></td>
           </tr>
         </tbody>
       </table>
@@ -67,6 +67,7 @@
         </div>
       </div>
     </div>
+  <DeleteRequestDialog :target="deleteTarget" @close="deleteTarget = null" />
   </div>
 </template>
 <script setup>
@@ -74,6 +75,8 @@ import { usePermissions } from '../usePermissions'
 const { canWriteAssets } = usePermissions()
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
+import DeleteRequestDialog from '../components/DeleteRequestDialog.vue'
+const deleteTarget = ref(null)
 import ImportExportButtons from '../components/ImportExportButtons.vue'
 const list = ref([]), showForm = ref(false), deptList = ref([])
 const filter = ref({ keyword:'', department:'', status:'' })
@@ -92,12 +95,7 @@ const filteredList = computed(() => {
 const form = ref({ id:null, number:'', carrier:'', card_type:'', department:'', user_name:'', status:'in_use' })
 async function load(){ const res = await api.get('/assets/numbers'); list.value = res.data }
 function edit(item){ Object.assign(form.value, item); showForm.value = true }
-async function askDelete(item){
-  const reason = prompt(`申请删除号码 ${item.number}，审批通过后会移出档案并保留历史，请输入原因：`)
-  if (!reason) return
-  await api.post('/delete-request', { table_name:'phone_numbers', record_id:item.id, record_desc:item.number, reason:reason })
-  alert('删除申请已提交，等待管理员审批')
-}
+function askDelete(item) { deleteTarget.value = { table_name: 'phone_numbers', record_id: item.id, record_desc: item.number } }
 async function save(){
   if (form.value.id) await api.put(`/assets/numbers/${form.value.id}`, form.value)
   else await api.post('/assets/numbers', form.value)
