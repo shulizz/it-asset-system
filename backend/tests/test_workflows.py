@@ -29,6 +29,18 @@ from models import MedicalAsset
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_existing_admin_empty_departments_remain_empty_on_restart(self):
+        from main import seed_admin
+        with SessionLocal() as db:
+            db.execute(text('DELETE FROM users WHERE id <> 1'))
+            db.execute(text('UPDATE users SET department=NULL,department_id=NULL,role_id=NULL WHERE id=1'))
+            db.execute(text('DELETE FROM departments'))
+            db.commit()
+        seed_admin()
+        with SessionLocal() as db:
+            self.assertEqual(db.query(User).count(),1)
+            self.assertEqual(db.query(Department).count(),0)
+
     @classmethod
     def setUpClass(cls):
         cls.password_hash = pwd_context.hash('testing-password-123')

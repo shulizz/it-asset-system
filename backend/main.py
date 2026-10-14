@@ -70,7 +70,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 @app.on_event("startup")
 def seed_admin():
     db = SessionLocal()
-    if not db.query(User).first():
+    first_boot = not db.query(User).first()
+    if first_boot:
         bootstrap_password = os.getenv("IT_ASSET_BOOTSTRAP_PASSWORD")
         if not bootstrap_password:
             db.close()
@@ -87,7 +88,7 @@ def seed_admin():
         )
         db.add(admin)
         db.commit()
-    if not db.query(Department).first():
+    if first_boot and not db.query(Department).first():
         for name in ["IT部", "研发部", "市场部", "财务部", "行政部", "管理层"]:
             db.add(Department(name=name))
         db.commit()
