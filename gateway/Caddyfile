@@ -1,0 +1,20 @@
+{
+	storage file_system {
+		root C:/FixedAssetSystem/gateway/data
+	}
+	log {
+		output file C:/FixedAssetSystem/gateway/logs/caddy.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
+
+slzz.cloud {
+	encode gzip
+	reverse_proxy 127.0.0.1:8000
+}
+
+www.slzz.cloud {
+	redir https://slzz.cloud{uri} permanent
+}

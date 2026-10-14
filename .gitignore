@@ -12,3 +12,5 @@ win-unpacked/
 *.msi
 .vite/
 .DS_Store
+/gateway/data/
+/gateway/logs/
