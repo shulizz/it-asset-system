@@ -10,7 +10,7 @@ MAX_ROWS = 10001  # header + 10,000 data rows
 MAX_COLUMNS = 100
 
 
-def read_rows(content):
+def read_rows(content, first_sheet=False):
     import openpyxl
     try:
         with ZipFile(BytesIO(content)) as archive:
@@ -37,7 +37,7 @@ def read_rows(content):
                             element.clear()
         wb = openpyxl.load_workbook(BytesIO(content), data_only=True, read_only=True)
         try:
-            ws = wb.active
+            ws = wb.worksheets[0] if first_sheet and wb.worksheets else wb.active
             if ws is None:
                 raise HTTPException(400, '文件没有可读取的工作表')
             if (ws.max_row or 0) > MAX_ROWS or (ws.max_column or 0) > MAX_COLUMNS:

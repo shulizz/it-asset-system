@@ -6,7 +6,7 @@ import os
 from database import engine, SessionLocal, Base
 from models import User, Department, Role
 from passlib.context import CryptContext
-from routers import auth, assets, transfer, scrap, delete_req, logs, departments, backup, version, wechat, import_export, reports
+from routers import auth, assets, transfer, scrap, delete_req, logs, departments, backup, version, wechat, import_export, reports, user_import
 
 Base.metadata.create_all(bind=engine)
 
@@ -64,6 +64,7 @@ app.include_router(version.router)
 app.include_router(wechat.router)
 app.include_router(import_export.router)
 app.include_router(reports.router)
+app.include_router(user_import.router)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

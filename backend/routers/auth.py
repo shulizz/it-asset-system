@@ -79,6 +79,21 @@ class UserIn(BaseModel):
     permissions: Optional[list[str]] = None
     data_scope: Literal["all", "department"] = "department"
 
+    @field_validator('username', 'name')
+    @classmethod
+    def validate_identity_text(cls, value):
+        value = value.strip()
+        if not value or len(value) > 50:
+            raise ValueError('账号和姓名不能为空，且最多50个字符')
+        return value
+
+    @field_validator('password')
+    @classmethod
+    def validate_password_size(cls, value):
+        if value and len(value.encode('utf-8')) > 72:
+            raise ValueError('密码最多72个UTF-8字节')
+        return value
+
     @field_validator('email')
     @classmethod
     def validate_email(cls, value):
@@ -106,8 +121,7 @@ class UserIn(BaseModel):
 def list_users(db: Session = Depends(get_db), user = Depends(require_super_admin)):
     return [user_view(item, db) for item in db.query(User).all()]
 
-@router.post("/users")
-def create_user(data: UserIn, db: Session = Depends(get_write_db), current_user = Depends(require_super_admin)):
+def new_user_values(data: UserIn, db: Session):
     validate_access(data)
     if not data.password or len(data.password) < 10:
         raise HTTPException(400, "新用户密码至少需要10个字符")
@@ -119,11 +133,16 @@ def create_user(data: UserIn, db: Session = Depends(get_write_db), current_user 
     if data.permissions is None:
         data.permissions = []
     validate_access(data)
-    new_user = User(username=data.username, name=data.name, email=data.email, role=data.role,
+    return dict(username=data.username, name=data.name, email=data.email, role=data.role,
                 role_id=None, department=data.department,
                 department_id=department.id if department else None,
                 permissions=json.dumps(data.permissions),
-                data_scope=data.data_scope, password_hash=pwd_context.hash(data.password))
+                data_scope=data.data_scope)
+
+
+@router.post("/users")
+def create_user(data: UserIn, db: Session = Depends(get_write_db), current_user = Depends(require_super_admin)):
+    new_user = User(**new_user_values(data, db), password_hash=pwd_context.hash(data.password))
     db.add(new_user)
     db.commit()
     return user_view(new_user, db)

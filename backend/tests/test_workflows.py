@@ -29,6 +29,49 @@ from models import MedicalAsset
 
 
 class WorkflowTests(unittest.TestCase):
+    def user_workbook(self, data_rows, active_notes=False):
+        from routers.user_import import HEADERS
+        wb=openpyxl.Workbook();wb.active.append(HEADERS)
+        for row in data_rows:wb.active.append(row)
+        if active_notes:wb.create_sheet('说明').append(['说明']);wb.active=1
+        buffer=BytesIO();wb.save(buffer);wb.close();return buffer.getvalue()
+
+    def test_user_import_template_superadmin_only(self):
+        response=self.client.get('/api/user-import/template',headers=self.headers(1))
+        self.assertEqual(response.status_code,200,response.text)
+        wb=openpyxl.load_workbook(BytesIO(response.content));self.assertEqual(wb.sheetnames,['新增用户','填写说明','权限对照'])
+        self.assertEqual(wb.worksheets[0]['A1'].value,'用户名');self.assertIsNone(wb.worksheets[0]['C2'].value);wb.close()
+        self.assertEqual(self.client.get('/api/user-import/template',headers=self.headers(3)).status_code,403)
+        self.assertEqual(self.client.post('/api/user-import/import',headers=self.headers(3),files={'file':('users.xlsx',self.user_workbook([]))}).status_code,403)
+
+    def test_user_import_creates_independent_permissions_and_valid_credentials(self):
+        content=self.user_workbook([['newreader','新用户','reader-password-123','new@qq.com','自由角色','甲部门','仅本部门','查看资产档案、导出数据'],['newblank','无权限用户','blank-password-123','','另一角色','','全部部门','']],active_notes=True)
+        response=self.client.post('/api/user-import/import',headers=self.headers(1),files={'file':('users.xlsx',content)})
+        self.assertEqual(response.status_code,200,response.text);self.assertEqual(response.json()['count'],2)
+        with SessionLocal() as db:
+            user=db.query(User).filter(User.username=='newreader').one()
+            self.assertTrue(pwd_context.verify('reader-password-123',user.password_hash));self.assertNotEqual(user.password_hash,'reader-password-123')
+            self.assertEqual(user.department_id,1);self.assertEqual(user.email,'new@qq.com');self.assertIsNone(user.role_id)
+            self.assertEqual(json.loads(user.permissions),['assets','export'])
+            self.assertEqual(db.query(User).filter(User.username=='newblank').one().permissions,'[]')
+        self.assertEqual(self.client.post('/api/auth/login',json={'username':'newreader','password':'reader-password-123'}).status_code,200)
+
+    def test_user_import_errors_are_atomic_and_never_echo_passwords(self):
+        content=self.user_workbook([['wouldpass','有效用户','valid-password-123','','岗位','','全部部门','assets'],['broken','无效用户','shortSECRET','bademail','super_admin','','全部部门','users']])
+        response=self.client.post('/api/user-import/import',headers=self.headers(1),files={'file':('users.xlsx',content)})
+        self.assertEqual(response.status_code,400,response.text);self.assertEqual(response.json()['detail']['errors'][0]['row'],3)
+        self.assertNotIn('shortSECRET',response.text)
+        with SessionLocal() as db:self.assertEqual(db.query(User).count(),5)
+        for rows in [[['admin','重复','testing-password-123','','','','全部部门','']], [['dupe','重复1','testing-password-123','','','','全部部门',''],['dupe','重复2','testing-password-123','','','','全部部门','']], [['badmail','坏邮箱','testing-password-123','bademail','','','全部部门','']], [['badgrant','越权','testing-password-123','','','甲部门','仅本部门','logs']]]:
+            response=self.client.post('/api/user-import/import',headers=self.headers(1),files={'file':('users.xlsx',self.user_workbook(rows))})
+            self.assertEqual(response.status_code,400,response.text)
+            with SessionLocal() as db:self.assertEqual(db.query(User).count(),5)
+
+    def test_user_import_rejects_empty_invalid_and_excessive_files(self):
+        for filename,content in [('users.xlsx',self.user_workbook([])),('users.csv',b'csv'),('users.xlsx',b'not xlsx'),('users.xlsx',self.user_workbook([['x'+str(i),'测试','testing-password-123','','','','全部部门',''] for i in range(101)]))]:
+            response=self.client.post('/api/user-import/import',headers=self.headers(1),files={'file':(filename,content)})
+            self.assertEqual(response.status_code,400,response.text)
+
     def test_existing_admin_empty_departments_remain_empty_on_restart(self):
         from main import seed_admin
         with SessionLocal() as db:

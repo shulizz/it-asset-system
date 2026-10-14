@@ -2,7 +2,7 @@
   <div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h2>用户权限</h2>
-      <button class="btn-primary" @click="openForm">+ 新增用户</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><UserImportButtons @imported="load" /><button class="btn-primary" @click="openForm">+ 新增用户</button></div>
     </div>
     <div class="panel">
       <table>
@@ -87,6 +87,7 @@
 import { ref, onMounted } from 'vue'
 import api from '../api'
 import FileDownloadButton from '../components/FileDownloadButton.vue'
+import UserImportButtons from '../components/UserImportButtons.vue'
 const list = ref([]), showForm = ref(false), deptList = ref([]), backups = ref([])
 const permissionList = ref([]), formError = ref('')
 const form = ref({ id:null, username:'', name:'', email:'', password:'', role:'', account_type:'regular', department:'' })
@@ -94,7 +95,8 @@ async function load(){
   const [u, d, b, p] = await Promise.all([api.get('/auth/users'), api.get('/departments'), api.get('/backup/list'), api.get('/auth/permissions')])
   list.value = u.data
   deptList.value = d.data
-  backups.value = b.data  permissionList.value = p.data
+  backups.value = b.data
+  permissionList.value = p.data
 }
 async function backupNow(){
   await api.post('/backup/')
