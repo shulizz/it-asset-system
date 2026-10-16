@@ -1,18 +1,10 @@
 <template>
   <div>
-    <div
-      style="
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 16px;
-      "
+    <PageHeading title="报废管理" description="提交报废申请，查看审核进度与处理结果。"
+      ><button class="btn-primary" @click="showForm = true">+ 发起报废申请</button></PageHeading
     >
-      <h2>报废管理</h2>
-      <button class="btn-primary" @click="showForm = true">+ 发起报废申请</button>
-    </div>
-    <div class="panel">
-      <table>
+    <TableFrame title="报废申请" :count="list.length"
+      ><table>
         <thead>
           <tr>
             <th>申请号</th>
@@ -22,7 +14,7 @@
             <th>原因</th>
             <th>状态</th>
             <th>提交日期</th>
-            <th>操作</th>
+            <th class="actions-header">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -51,8 +43,8 @@
             </td>
           </tr>
         </tbody>
-      </table>
-    </div>
+      </table></TableFrame
+    >
     <div v-if="showForm" class="modal-mask" @click="showForm = false">
       <div class="modal" @click.stop>
         <h3>发起报废申请</h3>
@@ -94,6 +86,8 @@
   </div>
 </template>
 <script setup>
+import PageHeading from '../components/PageHeading.vue'
+import TableFrame from '../components/TableFrame.vue'
 import { ref, onMounted, computed } from 'vue'
 import api from '../api'
 import { currentUser } from '../userState'
@@ -190,105 +184,3 @@ onMounted(async () => {
   deptList.value = res.data
 })
 </script>
-<style scoped>
-.panel {
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  overflow: hidden;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th {
-  background: #f8fafc;
-  text-align: left;
-  padding: 10px 12px;
-  font-size: 12px;
-  color: #64748b;
-  border-bottom: 1px solid #e2e8f0;
-}
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 13px;
-}
-.badge {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.blue {
-  background: #dbeafe;
-  color: #2563eb;
-}
-.amber {
-  background: #fef3c7;
-  color: #d97706;
-}
-.green {
-  background: #dcfce7;
-  color: #16a34a;
-}
-.gray {
-  background: #f1f5f9;
-  color: #64748b;
-}
-.red {
-  background: #fee2e2;
-  color: #dc2626;
-}
-.btn-primary {
-  background: #2563eb;
-  color: #fff;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.btn-outline {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-.modal {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  width: 420px;
-}
-.modal h3 {
-  margin-bottom: 16px;
-}
-.form-row {
-  margin-bottom: 12px;
-}
-.form-row label {
-  display: block;
-  font-size: 13px;
-  color: #64748b;
-  margin-bottom: 4px;
-}
-.form-row input,
-.form-row select {
-  width: 100%;
-  height: 36px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 0 10px;
-}
-</style>

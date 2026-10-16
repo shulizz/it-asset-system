@@ -1,34 +1,25 @@
 <template>
   <div>
-    <h2 style="margin-bottom: 16px">操作日志</h2>
-    <div style="display: flex; gap: 12px; margin-bottom: 16px">
+    <PageHeading title="操作日志" description="按操作人和模块查询关键业务记录。"></PageHeading>
+    <div class="filter-bar">
       <input
+        aria-label="搜索操作人/模块/内容..."
         v-model="keyword"
         placeholder="搜索操作人/模块/内容..."
-        style="
-          flex: 1;
-          height: 36px;
-          border: 1px solid #e2e8f0;
-          border-radius: 6px;
-          padding: 0 10px;
-        "
       />
-      <select
-        v-model="filterModule"
-        style="height: 36px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0 10px"
-      >
+      <select aria-label="筛选模块" v-model="filterModule">
         <option value="">全部模块</option>
         <option v-for="m in modules" :value="m">{{ m }}</option>
       </select>
     </div>
-    <div class="panel">
-      <table>
+    <TableFrame title="操作记录" :count="filtered.length"
+      ><table>
         <thead>
           <tr>
             <th>时间</th>
             <th>操作人</th>
             <th>模块</th>
-            <th>操作</th>
+            <th class="actions-header">操作</th>
             <th>内容</th>
           </tr>
         </thead>
@@ -43,11 +34,13 @@
             <td>{{ item.detail }}</td>
           </tr>
         </tbody>
-      </table>
-    </div>
+      </table></TableFrame
+    >
   </div>
 </template>
 <script setup>
+import PageHeading from '../components/PageHeading.vue'
+import TableFrame from '../components/TableFrame.vue'
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 const list = ref([])
@@ -73,37 +66,3 @@ const filtered = computed(() =>
   }),
 )
 </script>
-<style scoped>
-.panel {
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  overflow: hidden;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th {
-  background: #f8fafc;
-  text-align: left;
-  padding: 10px 12px;
-  font-size: 12px;
-  color: #64748b;
-  border-bottom: 1px solid #e2e8f0;
-}
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 13px;
-}
-.badge {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.blue {
-  background: #dbeafe;
-  color: #2563eb;
-}
-</style>

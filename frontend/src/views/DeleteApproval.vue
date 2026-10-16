@@ -1,10 +1,9 @@
 <template>
   <div>
-    <h2 style="margin-bottom: 20px">审批</h2>
+    <PageHeading title="审批" description="集中处理设备申请、删除申请与报废审批。"></PageHeading>
 
-    <h3 style="margin: 16px 0 8px; color: #334155">设备申请</h3>
-    <div class="panel" style="margin-bottom: 24px">
-      <table>
+    <TableFrame title="设备申请" :count="applyList.length"
+      ><table>
         <thead>
           <tr>
             <th>申请时间</th>
@@ -14,7 +13,7 @@
             <th>使用人</th>
             <th>部门</th>
             <th>状态</th>
-            <th>操作</th>
+            <th class="actions-header">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -36,35 +35,39 @@
             </td>
             <td>
               <template v-if="item.status === 'pending'">
-                <a
+                <button
+                  type="button"
+                  class="row-action"
                   @click="approveApply(item)"
                   style="color: #16a34a; cursor: pointer; margin-right: 10px"
-                  >通过</a
                 >
-                <a @click="rejectApply(item)" style="color: #dc2626; cursor: pointer">驳回</a>
+                  通过
+                </button>
+                <button
+                  type="button"
+                  class="row-action"
+                  @click="rejectApply(item)"
+                  style="color: #dc2626; cursor: pointer"
+                >
+                  驳回
+                </button>
               </template>
               <span v-else style="color: #94a3b8">已处理</span>
             </td>
           </tr>
-          <tr v-if="applyList.length === 0">
-            <td colspan="8" style="text-align: center; color: #94a3b8; padding: 20px">
-              暂无设备申请
-            </td>
-          </tr>
         </tbody>
-      </table>
-    </div>
+      </table></TableFrame
+    >
 
-    <h3 style="margin: 16px 0 8px; color: #334155">删除申请</h3>
-    <div class="panel" style="margin-bottom: 24px">
-      <table>
+    <TableFrame title="删除申请" :count="deleteList.length"
+      ><table>
         <thead>
           <tr>
             <th>申请时间</th>
             <th>删除内容</th>
             <th>原因</th>
             <th>状态</th>
-            <th>操作</th>
+            <th class="actions-header">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -79,28 +82,32 @@
             </td>
             <td>
               <template v-if="item.status === 'pending'">
-                <a
+                <button
+                  type="button"
+                  class="row-action"
                   @click="approveDel(item)"
                   style="color: #16a34a; cursor: pointer; margin-right: 10px"
-                  >通过</a
                 >
-                <a @click="rejectDel(item)" style="color: #dc2626; cursor: pointer">驳回</a>
+                  通过
+                </button>
+                <button
+                  type="button"
+                  class="row-action"
+                  @click="rejectDel(item)"
+                  style="color: #dc2626; cursor: pointer"
+                >
+                  驳回
+                </button>
               </template>
               <span v-else style="color: #94a3b8">{{ item.approver }}</span>
             </td>
           </tr>
-          <tr v-if="deleteList.length === 0">
-            <td colspan="5" style="text-align: center; color: #94a3b8; padding: 20px">
-              暂无删除申请
-            </td>
-          </tr>
         </tbody>
-      </table>
-    </div>
+      </table></TableFrame
+    >
 
-    <h3 style="margin: 16px 0 8px; color: #334155">报废申请</h3>
-    <div class="panel">
-      <table>
+    <TableFrame title="报废审批" :count="scrapList.length"
+      ><table>
         <thead>
           <tr>
             <th>申请号</th>
@@ -108,7 +115,7 @@
             <th>申请人</th>
             <th>原因</th>
             <th>状态</th>
-            <th>操作</th>
+            <th class="actions-header">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -124,27 +131,34 @@
             </td>
             <td>
               <template v-if="item.status === 'pending_approval'">
-                <a
+                <button
+                  type="button"
+                  class="row-action"
                   @click="approveScrap(item)"
                   style="color: #16a34a; cursor: pointer; margin-right: 10px"
-                  >通过</a
                 >
-                <a @click="rejectScrap(item)" style="color: #dc2626; cursor: pointer">驳回</a>
+                  通过
+                </button>
+                <button
+                  type="button"
+                  class="row-action"
+                  @click="rejectScrap(item)"
+                  style="color: #dc2626; cursor: pointer"
+                >
+                  驳回
+                </button>
               </template>
               <span v-else style="color: #94a3b8">已处理</span>
             </td>
           </tr>
-          <tr v-if="scrapList.length === 0">
-            <td colspan="6" style="text-align: center; color: #94a3b8; padding: 20px">
-              暂无报废申请
-            </td>
-          </tr>
         </tbody>
-      </table>
-    </div>
+      </table></TableFrame
+    >
   </div>
 </template>
 <script setup>
+import PageHeading from '../components/PageHeading.vue'
+import TableFrame from '../components/TableFrame.vue'
 import { ref, onMounted } from 'vue'
 import api from '../api'
 const deleteList = ref([])
@@ -223,53 +237,3 @@ function scrapStatusText(s) {
 }
 onMounted(load)
 </script>
-<style scoped>
-.panel {
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  overflow: hidden;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th {
-  background: #f8fafc;
-  text-align: left;
-  padding: 10px 12px;
-  font-size: 12px;
-  color: #64748b;
-  border-bottom: 1px solid #e2e8f0;
-}
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 13px;
-}
-.badge {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.amber {
-  background: #fef3c7;
-  color: #d97706;
-}
-.green {
-  background: #dcfce7;
-  color: #16a34a;
-}
-.red {
-  background: #fee2e2;
-  color: #dc2626;
-}
-.gray {
-  background: #f1f5f9;
-  color: #64748b;
-}
-.blue {
-  background: #dbeafe;
-  color: #2563eb;
-}
-</style>

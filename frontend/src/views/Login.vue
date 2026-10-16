@@ -1,14 +1,16 @@
 ﻿<template>
   <div class="login-wrap">
     <section class="login-intro">
-      <span class="intro-mark">资产</span>
+      <span class="intro-mark"><AppIcon name="asset" /></span>
       <h2>让每一项资产<br />都有清晰的去向。</h2>
       <p>统一资产档案、设备流转与审批记录，<br />让日常管理更有条理。</p>
       <div class="intro-capabilities">
-        <span>资产档案</span><span>流转审批</span><span>报表统计</span>
+        <span><AppIcon name="asset" />资产档案</span><span><AppIcon name="approval" />流转审批</span
+        ><span><AppIcon name="reports" />报表统计</span>
       </div>
     </section>
     <div class="login-box">
+      <div class="login-brand"><AppIcon name="asset" /></div>
       <h1>固定资产管理系统</h1>
       <p>登录账号，进入资产管理工作台</p>
       <div class="form-group">
@@ -35,9 +37,9 @@
       <button class="btn-login" @click="login">登录工作台</button>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <p style="text-align: center; margin-top: 16px">
-        <a @click="showSettings = true" style="color: #94a3b8; font-size: 12px; cursor: pointer"
-          >服务器设置</a
-        >
+        <button type="button" class="server-settings" @click="showSettings = true">
+          服务器设置
+        </button>
       </p>
     </div>
 
@@ -45,8 +47,8 @@
       <div class="modal" @click.stop>
         <h3 style="margin-bottom: 16px">服务器设置</h3>
         <div class="form-group">
-          <label>服务器地址</label>
-          <input v-model="serverURL" placeholder="如：http://192.168.4.106:8000" />
+          <label for="server-url">服务器地址</label>
+          <input id="server-url" v-model="serverURL" placeholder="如：https://slzz.cloud" />
         </div>
         <div style="display: flex; gap: 8px; justify-content: flex-end">
           <button class="btn-outline" @click="showSettings = false">取消</button>
@@ -58,6 +60,7 @@
 </template>
 
 <script setup>
+import AppIcon from '../components/AppIcon.vue'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api, { setServerURL, getServerURL } from '../api'
@@ -102,165 +105,212 @@ async function login() {
 </script>
 
 <style scoped>
-.login-intro {
-  width: 440px;
-  padding: 30px 48px 30px 0;
-  color: #fff;
-}
-.intro-mark {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
-  background: #3478f6;
-  font-weight: 700;
-  margin-bottom: 44px;
-}
-.login-intro h2 {
-  font-size: 34px;
-  line-height: 1.55;
-  font-weight: 600;
-  letter-spacing: 1px;
-}
-.login-intro p {
-  font-size: 14px;
-  line-height: 1.9;
-  color: #aabbd2;
-  margin-top: 20px;
-}
-.intro-capabilities {
-  display: flex;
-  gap: 20px;
-  margin-top: 40px;
-  font-size: 12px;
-  color: #c5d2e3;
-}
-
 .login-wrap {
   min-height: 100dvh;
-  padding: 32px 24px;
+  background: #122d40;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #14243b;
+  gap: 80px;
+  padding: 48px 32px;
+}
+.login-intro {
+  width: 400px;
+  color: white;
+  padding-block: 30px;
+}
+.intro-mark {
+  width: 49px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  background: #3168df;
+  color: white;
+  border-radius: 12px;
+  margin-bottom: 44px;
+}
+.intro-mark .app-icon {
+  width: 31px;
+  height: 31px;
+}
+.login-intro h2 {
+  font-size: 35px;
+  font-weight: 600;
+  line-height: 1.65;
+  letter-spacing: 0.5px;
+}
+.login-intro > p {
+  font-size: 13px;
+  color: #90acbf;
+  line-height: 2;
+  margin-top: 22px;
+}
+.intro-capabilities {
+  display: flex;
+  gap: 28px;
+  margin-top: 46px;
+  padding-top: 24px;
+  border-top: 1px solid #ffffff12;
+}
+.intro-capabilities span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #afc5d4;
+}
+.intro-capabilities .app-icon {
+  width: 17px;
+  height: 17px;
+  color: #7fa3bd;
 }
 .login-box {
-  background: #fff;
-  padding: 40px;
-  border-radius: 12px;
   width: 400px;
   max-width: 100%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 36px;
+  background: white;
+  border: 1px solid #e5edf2;
+  border-radius: 14px;
+  box-shadow: 0 24px 80px #061a2d33;
+}
+.login-brand {
+  display: none;
+  width: 39px;
+  height: 41px;
+  border-radius: 10px;
+  background: #edf3ff;
+  color: #3168df;
+  place-items: center;
+  margin-bottom: 22px;
+}
+.login-brand .app-icon {
+  width: 24px;
+  height: 24px;
 }
 .login-box h1 {
-  font-size: 20px;
-  text-align: center;
-  margin-bottom: 4px;
+  font-size: 22px;
+  font-weight: 650;
+  color: var(--ink);
+  letter-spacing: -0.3px;
 }
-.login-box p {
-  text-align: center;
-  color: #94a3b8;
-  font-size: 13px;
-  margin-bottom: 28px;
+.login-box > p {
+  font-size: 12px;
+  color: #8093a4;
+  margin-top: 8px;
+  margin-bottom: 30px;
 }
-.form-group {
-  margin-bottom: 16px;
+.login-box .form-group {
+  margin-bottom: 20px;
 }
-.form-group label {
-  display: block;
-  font-size: 13px;
-  color: #64748b;
-  margin-bottom: 6px;
+.login-box .form-group > label {
+  font-size: 12px;
+  margin-bottom: 8px;
+  color: #536e83;
 }
-.form-group input {
-  width: 100%;
-  height: 40px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 0 12px;
+.login-box input:not([type='checkbox']) {
+  height: 42px;
+  border: 1px solid #dbe5ed;
+  background: #fcfdff;
+  border-radius: 7px;
+  padding-inline: 12px;
 }
-.form-group input:focus {
-  outline: none;
-  border-color: #2563eb;
+.login-box input:focus {
+  background: white;
+  border-color: #90aff0;
 }
 .remember {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #64748b;
-  margin-bottom: 16px;
-  cursor: pointer;
+  gap: 8px;
+  font-size: 12px;
+  color: #7b90a1;
+  margin: 4px 0 22px;
 }
 .btn-login {
-  width: 100%;
   height: 42px;
-  background: #2865db;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 15px;
+  width: 100%;
+  border: 1px solid #3168df;
+  border-radius: 7px;
+  background: #3168df;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
 }
 .btn-login:hover {
-  background: #1e51b8;
+  background: #265ccc;
 }
 .login-box p.error {
+  background: #fff1f2;
+  color: #b64855;
+  border: 1px solid #f7dfe3;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 16px 0 0;
+}
+.server-settings {
+  padding: 3px 8px;
+  border: 0;
+  background: transparent;
+  color: #8ca0b0;
+  font-size: 11px;
+  cursor: pointer;
+}
+.server-settings:hover {
+  color: var(--primary);
+}
+.login-box > p:last-child {
   margin-bottom: 0;
-  color: #ef4444;
-  font-size: 13px;
-  text-align: center;
-  margin-top: 12px;
 }
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-.modal {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  width: 400px;
-}
-.btn-outline {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.btn-primary {
-  background: #2563eb;
-  color: #fff;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-@media (max-width: 850px) {
+@media (max-width: 1000px) {
+  .login-wrap {
+    gap: 44px;
+  }
   .login-intro {
-    width: 340px;
-    padding-right: 32px;
+    width: 330px;
   }
   .login-intro h2 {
-    font-size: 28px;
+    font-size: 30px;
+  }
+  .intro-capabilities {
+    gap: 18px;
+  }
+  .login-box {
+    width: 380px;
+    padding: 32px;
   }
 }
-@media (max-width: 680px) {
+@media (max-width: 760px) {
   .login-intro {
     display: none;
   }
-  .login-box {
-    padding: 32px 24px;
-  }
   .login-wrap {
-    padding: 20px;
+    padding: 24px 18px;
+    align-items: center;
+    background: #f1f5f9;
+  }
+  .login-box {
+    padding: 30px 26px;
+    width: 390px;
+    border-radius: 12px;
+    box-shadow: 0 8px 40px #173b5610;
+  }
+  .login-brand {
+    display: grid;
+  }
+  .login-box h1 {
+    font-size: 21px;
+  }
+  .login-box > p {
+    line-height: 1.8;
+  }
+  .login-box input:not([type='checkbox']) {
+    height: 44px;
+  }
+  .btn-login {
+    height: 44px;
   }
 }
 </style>

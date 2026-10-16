@@ -1,28 +1,20 @@
 <template>
   <div>
-    <div
-      style="
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 16px;
-      "
-    >
-      <h2>部门管理</h2>
-      <div style="display: flex; gap: 8px; align-items: center">
+    <PageHeading title="部门管理" description="维护组织部门与负责人，查看资产归属。"
+      ><div style="display: flex; gap: 8px; align-items: center">
         <ImportExportButtons module="department" />
         <button class="btn-primary" @click="openForm">+ 新增部门</button>
-      </div>
-    </div>
-    <div class="panel">
-      <table>
+      </div></PageHeading
+    >
+    <TableFrame title="部门列表" :count="list.length"
+      ><table>
         <thead>
           <tr>
             <th>部门名称</th>
             <th>负责人</th>
             <th>备注</th>
             <th>设备数</th>
-            <th>操作</th>
+            <th class="actions-header">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -32,14 +24,26 @@
             <td>{{ item.note || '—' }}</td>
             <td>{{ countMap[item.name] || 0 }}</td>
             <td>
-              <a @click="edit(item)" style="color: #2563eb; cursor: pointer; margin-right: 10px"
-                >编辑</a
-              ><a @click="askDelete(item)" style="color: #ef4444; cursor: pointer">删除</a>
+              <button
+                type="button"
+                class="row-action"
+                @click="edit(item)"
+                style="color: #2563eb; cursor: pointer; margin-right: 10px"
+              >
+                编辑</button
+              ><button
+                type="button"
+                class="row-action"
+                @click="askDelete(item)"
+                style="color: #ef4444; cursor: pointer"
+              >
+                删除
+              </button>
             </td>
           </tr>
         </tbody>
-      </table>
-    </div>
+      </table></TableFrame
+    >
     <div v-if="showForm" class="modal-mask" @click="showForm = false">
       <div class="modal" @click.stop>
         <h3>{{ form.id ? '编辑部门' : '新增部门' }}</h3>
@@ -55,6 +59,8 @@
   </div>
 </template>
 <script setup>
+import PageHeading from '../components/PageHeading.vue'
+import TableFrame from '../components/TableFrame.vue'
 import { ref, onMounted } from 'vue'
 import api from '../api'
 import ImportExportButtons from '../components/ImportExportButtons.vue'
@@ -106,79 +112,3 @@ async function save() {
 }
 onMounted(load)
 </script>
-<style scoped>
-.panel {
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  overflow: hidden;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th {
-  background: #f8fafc;
-  text-align: left;
-  padding: 10px 12px;
-  font-size: 12px;
-  color: #64748b;
-  border-bottom: 1px solid #e2e8f0;
-}
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 13px;
-}
-.btn-primary {
-  background: #2563eb;
-  color: #fff;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.btn-outline {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-.modal {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  width: 420px;
-}
-.modal h3 {
-  margin-bottom: 16px;
-}
-.form-row {
-  margin-bottom: 12px;
-}
-.form-row label {
-  display: block;
-  font-size: 13px;
-  color: #64748b;
-  margin-bottom: 4px;
-}
-.form-row input {
-  width: 100%;
-  height: 36px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 0 10px;
-}
-</style>

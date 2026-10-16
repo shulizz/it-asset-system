@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h2 style="margin-bottom: 16px">报废设备</h2>
+    <PageHeading title="报废设备" description="查阅已报废设备，保留历史资产信息。"></PageHeading>
     <div class="stats" style="margin-bottom: 20px">
       <div class="card">
         <div class="num" style="color: #dc2626">{{ list.length }}</div>
@@ -19,8 +19,8 @@
         <div class="label">医疗</div>
       </div>
     </div>
-    <div class="panel">
-      <table>
+    <TableFrame title="报废资产列表" :count="list.length"
+      ><table>
         <thead>
           <tr>
             <th>资产编号</th>
@@ -40,17 +40,14 @@
             <td>{{ item.department || '—' }}</td>
             <td><span class="badge red">已报废</span></td>
           </tr>
-          <tr v-if="list.length === 0">
-            <td colspan="5" style="text-align: center; color: #94a3b8; padding: 30px">
-              暂无报废设备
-            </td>
-          </tr>
         </tbody>
-      </table>
-    </div>
+      </table></TableFrame
+    >
   </div>
 </template>
 <script setup>
+import PageHeading from '../components/PageHeading.vue'
+import TableFrame from '../components/TableFrame.vue'
 import { ref, onMounted } from 'vue'
 import api from '../api'
 const list = ref([])
@@ -77,69 +74,3 @@ function typeClass(t) {
   return { IT设备: 'blue', 手机: 'purple', 医疗: 'green' }[t] || 'gray'
 }
 </script>
-<style scoped>
-.stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-.card {
-  background: #fff;
-  border-radius: 10px;
-  padding: 20px;
-  border: 1px solid #e2e8f0;
-}
-.num {
-  font-size: 28px;
-  font-weight: 700;
-}
-.label {
-  font-size: 12px;
-  color: #94a3b8;
-  margin-top: 4px;
-}
-.panel {
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  overflow: hidden;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th {
-  background: #f8fafc;
-  text-align: left;
-  padding: 10px 12px;
-  font-size: 12px;
-  color: #64748b;
-  border-bottom: 1px solid #e2e8f0;
-}
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 13px;
-}
-.badge {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.blue {
-  background: #dbeafe;
-  color: #2563eb;
-}
-.purple {
-  background: #ede9fe;
-  color: #7c3aed;
-}
-.green {
-  background: #dcfce7;
-  color: #16a34a;
-}
-.red {
-  background: #fee2e2;
-  color: #dc2626;
-}
-</style>

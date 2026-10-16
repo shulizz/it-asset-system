@@ -1,15 +1,13 @@
 ﻿<template>
   <div>
-    <h2 style="margin-bottom: 20px; display: flex; gap: 12px; align-items: center">
-      报表统计
-      <FileDownloadButton
+    <PageHeading title="报表统计" description="查看资产数量、使用状态及部门分布。"
+      ><FileDownloadButton
         v-if="canExport"
         endpoint="/reports/export"
         filename="资产报表.xlsx"
         label="导出Excel"
         button-class="btn btn-primary"
-      />
-    </h2>
+    /></PageHeading>
     <p v-if="loadError" style="color: #b45309">{{ loadError }}</p>
     <div class="stats">
       <div class="card">
@@ -53,9 +51,8 @@
     </div>
 
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px">
-      <div class="panel">
-        <div class="panel-header"><h3>各部门设备分布</h3></div>
-        <table>
+      <TableFrame title="部门资产分布" :count="deptStats.length"
+        ><table>
           <thead>
             <tr>
               <th>部门</th>
@@ -74,11 +71,10 @@
               <td>{{ d.number }}</td>
             </tr>
           </tbody>
-        </table>
-      </div>
-      <div class="panel">
-        <div class="panel-header"><h3>闲置设备清单</h3></div>
-        <table>
+        </table></TableFrame
+      >
+      <TableFrame title="闲置设备明细" :count="idleList.length"
+        ><table>
           <thead>
             <tr>
               <th>编号</th>
@@ -93,12 +89,14 @@
               <td>{{ item.type }}</td>
             </tr>
           </tbody>
-        </table>
-      </div>
+        </table></TableFrame
+      >
     </div>
   </div>
 </template>
 <script setup>
+import PageHeading from '../components/PageHeading.vue'
+import TableFrame from '../components/TableFrame.vue'
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import { currentUser, refreshCurrentUser } from '../userState'
@@ -177,32 +175,6 @@ onMounted(async () => {
 })
 </script>
 <style scoped>
-.stats {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
-}
-.card {
-  background: #fff;
-  border-radius: 10px;
-  padding: 20px;
-  border: 1px solid #e2e8f0;
-}
-.num {
-  font-size: 28px;
-  font-weight: 700;
-}
-.label {
-  font-size: 12px;
-  color: #94a3b8;
-  margin-top: 4px;
-}
-.panel {
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  overflow: hidden;
-}
 .btn-export {
   margin-left: 12px;
   background: #16a34a;
@@ -218,22 +190,5 @@ onMounted(async () => {
   padding: 16px 20px;
   border-bottom: 1px solid #f1f5f9;
   font-weight: 600;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th {
-  background: #f8fafc;
-  text-align: left;
-  padding: 10px 12px;
-  font-size: 12px;
-  color: #64748b;
-  border-bottom: 1px solid #e2e8f0;
-}
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 13px;
 }
 </style>

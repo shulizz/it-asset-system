@@ -1,36 +1,22 @@
 <template>
   <div>
-    <div
-      style="
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 16px;
-      "
-    >
-      <h2>医疗设备档案</h2>
-      <div style="display: flex; gap: 8px; align-items: center">
+    <PageHeading title="医疗设备档案" description="管理医疗设备档案，及时跟进校准与使用期限。"
+      ><div style="display: flex; gap: 8px; align-items: center">
         <ImportExportButtons module="medical" />
         <button v-if="canWriteAssets" class="btn-primary" @click="openForm">+ 新增设备</button>
-      </div>
-    </div>
-    <div style="display: flex; gap: 12px; margin-bottom: 16px">
+      </div></PageHeading
+    >
+    <div class="filter-bar">
       <input
+        aria-label="搜索编号/名称/保管人"
         v-model="filter.keyword"
         placeholder="搜索编号/名称/保管人"
-        style="flex: 1; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px"
       />
-      <select
-        v-model="filter.department"
-        style="width: 150px; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px"
-      >
+      <select aria-label="筛选部门" v-model="filter.department">
         <option value="">全部科室</option>
         <option v-for="d in deptList" :value="d.name">{{ d.name }}</option>
       </select>
-      <select
-        v-model="filter.status"
-        style="width: 120px; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px"
-      >
+      <select aria-label="筛选状态" v-model="filter.status">
         <option value="">全部状态</option>
         <option value="in_use">在用</option>
         <option value="idle">闲置</option>
@@ -46,8 +32,8 @@
       </div>
       <ExpiryEmailDialog v-if="canSendEmail" reminder-type="calibration" />
     </section>
-    <div class="panel">
-      <table>
+    <TableFrame title="医疗设备台账" :count="filteredList.length"
+      ><table>
         <thead>
           <tr>
             <th>资产编号</th>
@@ -62,7 +48,7 @@
             <th>设备到期时间</th>
             <th>剩余天数</th>
             <th>状态</th>
-            <th>操作</th>
+            <th class="actions-header">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -103,11 +89,14 @@
               }}</span>
             </td>
             <td>
-              <a
+              <button
+                type="button"
+                class="row-action"
                 v-if="canWriteAssets"
                 @click="edit(item)"
                 style="color: #2563eb; cursor: pointer; margin-right: 10px"
-                >编辑</a
+              >
+                编辑</button
               ><button
                 type="button"
                 class="delete-action"
@@ -120,8 +109,8 @@
             </td>
           </tr>
         </tbody>
-      </table>
-    </div>
+      </table></TableFrame
+    >
     <div v-if="showForm" class="modal-mask" @click="showForm = false">
       <div class="modal" @click.stop>
         <h3>{{ form.id ? '编辑医疗设备' : '新增医疗设备' }}</h3>
@@ -177,6 +166,8 @@
   </div>
 </template>
 <script setup>
+import PageHeading from '../components/PageHeading.vue'
+import TableFrame from '../components/TableFrame.vue'
 import { usePermissions } from '../usePermissions'
 import { currentUser } from '../userState'
 const { canWriteAssets } = usePermissions()
@@ -342,102 +333,7 @@ onMounted(async () => {
 .date-cell {
   white-space: nowrap;
 }
-.panel {
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  overflow: hidden;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th {
-  background: #f8fafc;
-  text-align: left;
-  padding: 10px 12px;
-  font-size: 12px;
-  color: #64748b;
-  border-bottom: 1px solid #e2e8f0;
-}
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 13px;
-}
-.badge {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.green {
-  background: #dcfce7;
-  color: #16a34a;
-}
-.amber {
-  background: #fef3c7;
-  color: #d97706;
-}
-.red {
-  background: #fee2e2;
-  color: #dc2626;
-}
-.gray {
-  background: #f1f5f9;
-  color: #64748b;
-}
 .expiring-row {
   background: #fef2f2;
-}
-.btn-primary {
-  background: #2563eb;
-  color: #fff;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.btn-outline {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-.modal {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  width: 420px;
-}
-.modal h3 {
-  margin-bottom: 16px;
-}
-.form-row {
-  margin-bottom: 12px;
-}
-.form-row label {
-  display: block;
-  font-size: 13px;
-  color: #64748b;
-  margin-bottom: 4px;
-}
-.form-row input {
-  width: 100%;
-  height: 36px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 0 10px;
 }
 </style>

@@ -1,22 +1,14 @@
 <template>
   <div>
-    <div
-      style="
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 16px;
-      "
-    >
-      <h2>用户权限</h2>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap">
+    <PageHeading title="用户权限" description="按用户分配操作权限和数据范围，角色名称仅用于展示。"
+      ><div style="display: flex; gap: 8px; flex-wrap: wrap">
         <UserImportButtons @imported="load" /><button class="btn-primary" @click="openForm">
           + 新增用户
         </button>
-      </div>
-    </div>
-    <div class="panel">
-      <table>
+      </div></PageHeading
+    >
+    <TableFrame title="用户列表" :count="list.length"
+      ><table>
         <thead>
           <tr>
             <th>用户名</th>
@@ -27,7 +19,7 @@
             <th>数据范围</th>
             <th>已分配权限</th>
             <th>状态</th>
-            <th>操作</th>
+            <th class="actions-header">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -57,37 +49,50 @@
               }}</span>
             </td>
             <td>
-              <a @click="edit(u)" style="color: #0d9488; cursor: pointer; margin-right: 10px"
-                >编辑</a
+              <button
+                type="button"
+                class="row-action"
+                @click="edit(u)"
+                style="color: #0d9488; cursor: pointer; margin-right: 10px"
               >
-              <a @click="toggle(u)" style="color: #d97706; cursor: pointer; margin-right: 10px">{{
-                u.is_active ? '停用' : '启用'
-              }}</a>
-              <a @click="del(u)" style="color: #ef4444; cursor: pointer">删除</a>
+                编辑
+              </button>
+              <button
+                type="button"
+                class="row-action"
+                @click="toggle(u)"
+                style="color: #d97706; cursor: pointer; margin-right: 10px"
+              >
+                {{ u.is_active ? '停用' : '启用' }}
+              </button>
+              <button
+                type="button"
+                class="row-action"
+                @click="del(u)"
+                style="color: #ef4444; cursor: pointer"
+              >
+                删除
+              </button>
             </td>
           </tr>
         </tbody>
-      </table>
-    </div>
+      </table></TableFrame
+    >
 
-    <div class="panel" style="margin-top: 24px; padding: 16px">
-      <div
-        style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 12px;
-        "
+    <TableFrame
+      title="数据备份"
+      :count="backups.length"
+      empty-title="暂无备份记录"
+      empty-description="可使用立即备份保存当前数据库，完成后在这里下载。"
+      ><template #actions
+        ><button class="btn-primary" @click="backupNow">立即备份</button></template
       >
-        <h3 style="font-size: 15px">数据备份</h3>
-        <button class="btn-primary" @click="backupNow">立即备份</button>
-      </div>
-      <table v-if="backups.length">
+      <table>
         <thead>
           <tr>
             <th>备份文件</th>
             <th>大小</th>
-            <th>操作</th>
+            <th class="actions-header">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -102,10 +107,8 @@
               />
             </td>
           </tr>
-        </tbody>
-      </table>
-      <p v-else style="color: #94a3b8; font-size: 13px">暂无备份</p>
-    </div>
+        </tbody></table
+    ></TableFrame>
     <div v-if="showForm" class="modal-mask" @click="showForm = false">
       <div class="modal" @click.stop>
         <h3>{{ form.id ? '编辑用户' : '新增用户' }}</h3>
@@ -198,6 +201,8 @@
   </div>
 </template>
 <script setup>
+import PageHeading from '../components/PageHeading.vue'
+import TableFrame from '../components/TableFrame.vue'
 import { ref, onMounted } from 'vue'
 import api from '../api'
 import FileDownloadButton from '../components/FileDownloadButton.vue'
@@ -317,106 +322,7 @@ function roleText(r) {
 onMounted(load)
 </script>
 <style scoped>
-.panel {
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  overflow: hidden;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th {
-  background: #f8fafc;
-  text-align: left;
-  padding: 10px 12px;
-  font-size: 12px;
-  color: #64748b;
-  border-bottom: 1px solid #e2e8f0;
-}
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 13px;
-}
-.badge {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.red {
-  background: #fee2e2;
-  color: #dc2626;
-}
-.blue {
-  background: #dbeafe;
-  color: #2563eb;
-}
-.green {
-  background: #dcfce7;
-  color: #16a34a;
-}
-.purple {
-  background: #ede9fe;
-  color: #7c3aed;
-}
-.gray {
-  background: #f1f5f9;
-  color: #64748b;
-}
-.btn-primary {
-  background: #2563eb;
-  color: #fff;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.btn-outline {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
 .modal {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
   width: 640px;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-.modal h3 {
-  margin-bottom: 16px;
-}
-.form-row {
-  margin-bottom: 12px;
-}
-.form-row label {
-  display: block;
-  font-size: 13px;
-  color: #64748b;
-  margin-bottom: 4px;
-}
-.form-row input,
-.form-row select {
-  width: 100%;
-  height: 36px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 0 10px;
 }
 </style>

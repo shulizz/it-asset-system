@@ -1,11 +1,12 @@
 <template>
   <div>
-    <h2 style="margin-bottom: 20px">设备申请</h2>
-    <div class="panel">
-      <div style="margin-bottom: 20px">
+    <PageHeading title="设备申请" description="提交设备领用、调拨或报废申请，跟踪处理进度。"
+      ><div>
         <button class="btn-primary" @click="showForm = true">+ 新建设备申请</button>
-      </div>
-      <table>
+      </div></PageHeading
+    >
+    <TableFrame title="申请记录" :count="list.length"
+      ><table>
         <thead>
           <tr>
             <th>申请号</th>
@@ -33,14 +34,9 @@
             </td>
             <td>{{ item.created_at || '—' }}</td>
           </tr>
-          <tr v-if="list.length === 0">
-            <td colspan="7" style="text-align: center; color: #94a3b8; padding: 30px">
-              暂无申请记录
-            </td>
-          </tr>
         </tbody>
-      </table>
-    </div>
+      </table></TableFrame
+    >
 
     <div v-if="showForm" class="modal-mask" @click="showForm = false">
       <div class="modal" @click.stop>
@@ -97,6 +93,8 @@
   </div>
 </template>
 <script setup>
+import PageHeading from '../components/PageHeading.vue'
+import TableFrame from '../components/TableFrame.vue'
 import { ref, onMounted } from 'vue'
 import api from '../api'
 import { applicationRows } from '../applicationRows'
@@ -216,109 +214,3 @@ onMounted(async () => {
   deptList.value = res.data
 })
 </script>
-<style scoped>
-.panel {
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  overflow: hidden;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th {
-  background: #f8fafc;
-  text-align: left;
-  padding: 10px 12px;
-  font-size: 12px;
-  color: #64748b;
-  border-bottom: 1px solid #e2e8f0;
-}
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 13px;
-}
-.badge {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.blue {
-  background: #dbeafe;
-  color: #2563eb;
-}
-.green {
-  background: #dcfce7;
-  color: #16a34a;
-}
-.amber {
-  background: #fef3c7;
-  color: #d97706;
-}
-.red {
-  background: #fee2e2;
-  color: #dc2626;
-}
-.gray {
-  background: #f1f5f9;
-  color: #64748b;
-}
-.btn-primary {
-  background: #2563eb;
-  color: #fff;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.btn-outline {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-.modal {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  width: 420px;
-}
-.modal h3 {
-  margin-bottom: 16px;
-}
-.form-row {
-  margin-bottom: 12px;
-}
-.form-row label {
-  display: block;
-  font-size: 13px;
-  color: #64748b;
-  margin-bottom: 4px;
-}
-.form-row input,
-.form-row select,
-.form-row textarea {
-  width: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 0 10px;
-  box-sizing: border-box;
-}
-.form-row textarea {
-  padding: 8px 10px;
-}
-</style>
