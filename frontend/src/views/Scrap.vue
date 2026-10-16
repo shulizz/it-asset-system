@@ -1,7 +1,10 @@
 <template>
   <div>
     <PageHeading title="报废管理" description="提交报废申请，查看审核进度与处理结果。"
-      ><button class="btn-primary" @click="showForm = true">+ 发起报废申请</button></PageHeading
+      ><div class="scrap-heading-actions">
+        <button class="btn-outline" @click="openPrint(null)">打印空白报废单</button
+        ><button class="btn-primary" @click="showForm = true">+ 发起报废申请</button>
+      </div></PageHeading
     >
     <TableFrame title="报废申请" :count="list.length"
       ><table>
@@ -31,6 +34,9 @@
             </td>
             <td>{{ item.submit_date || '—' }}</td>
             <td>
+              <button type="button" class="row-action print-record-action" @click="openPrint(item)">
+                打印报废单
+              </button>
               <button
                 type="button"
                 class="delete-action"
@@ -83,16 +89,25 @@
       </div>
     </div>
     <DeleteRequestDialog :target="deleteTarget" @close="deleteTarget = null" />
+    <ScrapPrintDialog v-if="showPrint" :record="printRecord" @close="showPrint = false" />
   </div>
 </template>
 <script setup>
 import PageHeading from '../components/PageHeading.vue'
 import TableFrame from '../components/TableFrame.vue'
+import ScrapPrintDialog from '../components/ScrapPrintDialog.vue'
+import { scrapStatusText } from '../scrapPrint'
 import { ref, onMounted, computed } from 'vue'
 import api from '../api'
 import { currentUser } from '../userState'
 import DeleteRequestDialog from '../components/DeleteRequestDialog.vue'
 const deleteTarget = ref(null)
+const showPrint = ref(false),
+  printRecord = ref(null)
+function openPrint(item) {
+  printRecord.value = item
+  showPrint.value = true
+}
 const canWriteAssets = computed(() =>
   (currentUser.value.permissions || []).includes('assets_write'),
 )
@@ -168,15 +183,17 @@ function reject(item) {
 }
 function statusClass(s) {
   return (
-    { pending_approval: 'amber', approved: 'green', disposed: 'gray', archived: 'gray' }[s] ||
-    'gray'
+    {
+      pending_approval: 'amber',
+      approved: 'green',
+      rejected: 'red',
+      disposed: 'gray',
+      archived: 'gray',
+    }[s] || 'gray'
   )
 }
 function statusText(s) {
-  return (
-    { pending_approval: '待审批', approved: '已批准', disposed: '已处置', archived: '已归档' }[s] ||
-    s
-  )
+  return scrapStatusText(s)
 }
 onMounted(async () => {
   load()
@@ -184,3 +201,13 @@ onMounted(async () => {
   deptList.value = res.data
 })
 </script>
+<style scoped>
+.print-record-action {
+  margin-right: 10px;
+}
+.scrap-heading-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+</style>
