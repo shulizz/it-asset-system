@@ -65,7 +65,8 @@ MODULES = {
             ("型号", "model", False),
             ("科室", "department", False),
             ("保管人", "keeper", False),
-            ("校准到期", "calibration_expiry", False),
+            ("校准时间", "calibration_date", False),
+            ("校准到期时间", "calibration_expiry", False),
             ("状态", "status", False),
             ("保修到期", "warranty_expiry", False),
             ("购入日期", "purchase_date", False),
@@ -287,6 +288,8 @@ def import_excel(
         if cell is None:
             continue
         cn = str(cell).strip()
+        if module == 'medical' and cn == '校准到期':
+            cn = '校准到期时间'  # Accept previously downloaded medical templates.
         for cn_name, field_name, required in cfg["fields"]:
             if cn == cn_name:
                 col_map[idx] = field_name
@@ -317,7 +320,7 @@ def import_excel(
 
         try:
             for cn_name, field_name, _ in cfg['fields']:
-                if field_name in ('purchase_date', 'calibration_expiry', 'expiry_date') or (field_name == 'warranty_expiry' and module != 'medical'):
+                if field_name in ('purchase_date', 'calibration_date', 'calibration_expiry', 'expiry_date') or (field_name == 'warranty_expiry' and module != 'medical'):
                     data[field_name] = _parse_date(data.get(field_name))
                 elif field_name in ('price', 'use_years'):
                     data[field_name] = _parse_float(data.get(field_name))
@@ -325,6 +328,15 @@ def import_excel(
             skipped += 1
             errors.append(f'第{row_idx}行：{cn_name}，{error}')
             continue
+
+        if module == 'medical':
+            from medical_dates import validate_calibration_dates
+            try:
+                validate_calibration_dates(data.get('calibration_date'), data.get('calibration_expiry'))
+            except ValueError as error:
+                skipped += 1
+                errors.append(f'第{row_idx}行：{error}')
+                continue
 
         # 去重检查
         unique_fields = {

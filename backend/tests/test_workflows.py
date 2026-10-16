@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import date, timedelta
 
 workspace = tempfile.TemporaryDirectory(prefix='asset-regression-')
 os.environ['IT_ASSET_DATABASE_URL'] = 'sqlite:///' + str(Path(workspace.name) / 'test.db').replace('\\', '/')
@@ -29,6 +29,57 @@ from models import MedicalAsset
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_medical_calibration_create_update_and_optional_dates(self):
+        payload={'name':'校准设备','department':'甲部门','keeper':'保管人','calibration_date':'2026-01-01','calibration_expiry':'2026-12-31'}
+        response=self.client.post('/api/assets/medical',headers=self.headers(1),json=payload)
+        self.assertEqual(response.status_code,200,response.text);item_id=response.json()['id']
+        self.assertEqual(response.json()['calibration_date'],'2026-01-01')
+        response=self.client.put(f'/api/assets/medical/{item_id}',headers=self.headers(1),json={'name':'改名'})
+        self.assertEqual(response.status_code,200,response.text);self.assertEqual(response.json()['calibration_expiry'],'2026-12-31');self.assertEqual(response.json()['status'],'in_use')
+        response=self.client.put(f'/api/assets/medical/{item_id}',headers=self.headers(1),json={'name':'改名','calibration_expiry':'2025-01-01'})
+        self.assertEqual(response.status_code,400,response.text)
+        payload['calibration_expiry']='2025-01-01'
+        self.assertEqual(self.client.post('/api/assets/medical',headers=self.headers(1),json=payload).status_code,422)
+        self.assertEqual(self.client.post('/api/assets/medical',headers=self.headers(1),json={'name':'日期可选','calibration_date':None,'calibration_expiry':None,'expiry_date':None}).status_code,200)
+
+    def test_calibration_reminder_boundaries_scope_and_selected_mail(self):
+        today=date.today()
+        with SessionLocal() as db:
+            for i,(offset,status,department_id) in enumerate([(-1,'in_use',1),(0,'idle',1),(30,'in_use',1),(31,'in_use',1),(1,'scrapped',1),(1,'archived',1),(1,'in_use',2)]):
+                db.add(MedicalAsset(asset_number='CAL-'+str(i),name='校准设备'+str(i),status=status,department_id=department_id,calibration_date=today-timedelta(days=60),calibration_expiry=today+timedelta(days=offset),expiry_date=today+timedelta(days=365)))
+            db.get(User,2).email='recipient@qq.com';db.commit()
+        response=self.client.get('/api/assets/medical/expiring?reminder_type=calibration',headers=self.headers(3))
+        self.assertEqual(response.status_code,200,response.text);self.assertEqual([r['days_left'] for r in response.json()],[-1,0,30])
+        self.assertEqual(self.client.get('/api/assets/medical/expiring',headers=self.headers(3)).json(),[])
+        with patch('notifier.send_email',return_value={'success':True,'message':'测试发送'}) as mock:
+            response=self.client.post('/api/assets/medical/send-expiry-email?reminder_type=calibration',headers=self.headers(1),json={'recipient_user_ids':[2]})
+            self.assertEqual(response.status_code,200,response.text);self.assertEqual(response.json()['count'],4)
+            self.assertEqual(mock.call_args.args[0],['recipient@qq.com']);self.assertIn('校准到期提醒',mock.call_args.args[1]);self.assertIn('校准时间',mock.call_args.args[2]);self.assertNotIn('CAL-3',mock.call_args.args[2])
+        self.assertEqual(self.client.post('/api/assets/medical/send-expiry-email?reminder_type=calibration',headers=self.headers(3),json={'recipient_user_ids':[2]}).status_code,403)
+        self.assertEqual(self.client.get('/api/assets/medical/expiring?reminder_type=other',headers=self.headers(1)).status_code,422)
+        self.assertEqual(self.client.get('/api/assets/medical/expiring?days=0',headers=self.headers(1)).status_code,400)
+
+    def test_calibration_empty_does_not_send_mail(self):
+        from notifier import send_expiry_notice
+        with SessionLocal() as db,patch('notifier.send_email') as mock:
+            response=send_expiry_notice(db,30,['recipient@qq.com'],'calibration')
+            self.assertEqual(response['count'],0);mock.assert_not_called()
+
+    def test_medical_calibration_excel_new_and_legacy_headers(self):
+        def workbook(headers,rows):
+            book=openpyxl.Workbook();book.active.append(headers)
+            for row in rows:book.active.append(row)
+            buf=BytesIO();book.save(buf);book.close();return buf.getvalue()
+        headers=['设备名称','校准时间','校准到期时间']
+        content=workbook(headers,[['有效校准','2026-01-01','2026-12-31'],['错误日期','2026-12-31','2026-01-01']])
+        response=self.client.post('/api/ie/medical/import',headers=self.headers(1),files={'file':('medical.xlsx',content)})
+        self.assertEqual(response.status_code,200,response.text);self.assertEqual(response.json()['imported'],1);self.assertIn('不能早于',response.json()['errors'][0])
+        legacy=workbook(['设备名称','校准到期'],[['旧模板','2027-01-01']])
+        self.assertEqual(self.client.post('/api/ie/medical/import',headers=self.headers(1),files={'file':('medical.xlsx',legacy)}).json()['imported'],1)
+        response=self.client.get('/api/ie/medical/export',headers=self.headers(1));book=openpyxl.load_workbook(BytesIO(response.content));rows=list(book.active.values);book.close()
+        self.assertIn('校准时间',rows[0]);self.assertIn('校准到期时间',rows[0])
+        self.assertEqual(str(rows[1][rows[0].index('校准时间')])[:10],'2026-01-01')
+
     def user_workbook(self, data_rows, active_notes=False):
         from routers.user_import import HEADERS
         wb=openpyxl.Workbook();wb.active.append(HEADERS)

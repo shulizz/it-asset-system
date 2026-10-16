@@ -45,22 +45,25 @@ def send_email(to_list: list, subject: str, content: str) -> dict:
         return {"success": False, "message": "邮件发送失败，请检查发件邮箱授权码、SMTP服务和服务器网络"}
 
 
-def get_expiring_medical(db: Session, days: int = 30, user=None) -> list:
+def get_expiring_medical(db: Session, days: int = 30, user=None, reminder_type='expiry') -> list:
     """获取 N 天内即将到期或已过期的医疗设备"""
     today = date.today()
     deadline = today + timedelta(days=days)
     query = db.query(MedicalAsset)
+    if reminder_type not in ('expiry', 'calibration'):
+        raise ValueError('无效的提醒类型')
+    due_column = MedicalAsset.calibration_expiry if reminder_type == 'calibration' else MedicalAsset.expiry_date
     if user is not None:
         from deps import scope_query
         query = scope_query(query, MedicalAsset, user)
     assets = query.filter(
-        MedicalAsset.expiry_date.isnot(None),
+        due_column.isnot(None),
         MedicalAsset.status.notin_(["scrapped", "archived"]),
     ).all()
     result = []
     for a in assets:
         try:
-            exp = datetime.strptime(str(a.expiry_date)[:10], "%Y-%m-%d").date()
+            exp = datetime.strptime(str(getattr(a, due_column.key))[:10], "%Y-%m-%d").date()
         except Exception:
             continue
         delta = (exp - today).days
@@ -70,22 +73,31 @@ def get_expiring_medical(db: Session, days: int = 30, user=None) -> list:
                 "name": a.name,
                 "department": a.department or "",
                 "keeper": a.keeper or "",
-                "expiry_date": str(a.expiry_date)[:10],
+                "expiry_date": str(a.expiry_date)[:10] if a.expiry_date else '',
+                "calibration_date": str(a.calibration_date)[:10] if a.calibration_date else '',
+                "calibration_expiry": str(a.calibration_expiry)[:10] if a.calibration_expiry else '',
+                "due_date": exp.isoformat(),
+                "reminder_type": reminder_type,
                 "days_left": delta,
             })
     result.sort(key=lambda x: x["days_left"])
     return result
 
 
-def send_expiry_notice(db: Session, days: int = 30, recipients=None) -> dict:
+def send_expiry_notice(db: Session, days: int = 30, recipients=None, reminder_type='expiry') -> dict:
     """发送到期提醒邮件"""
-    expiring = get_expiring_medical(db, days)
+    calibration = reminder_type == 'calibration'
+    title = '医疗设备校准到期提醒' if calibration else '医疗设备到期提醒'
+    date_title = '校准到期时间' if calibration else '到期日期'
+    calibration_header = '<th style="padding:8px 12px;border:1px solid #e2e8f0">校准时间</th>' if calibration else ''
+    expiring = get_expiring_medical(db, days, reminder_type=reminder_type)
     if not expiring:
-        return {"success": True, "message": f"近{days}天内无设备到期，无需发送", "count": 0}
+        return {"success": True, "message": f"近{days}天内无设备{'校准' if calibration else ''}到期，无需发送", "count": 0}
 
     rows = ""
     for e in expiring:
         e = {key: escape(str(value)) if key != 'days_left' else value for key, value in e.items()}
+        calibration_cell = f'<td style="padding:6px 12px;border:1px solid #e2e8f0">{e["calibration_date"] or "—"}</td>' if calibration else ''
         if e["days_left"] < 0:
             tag = f'<span style="color:#dc2626;font-weight:bold">已过期{abs(e["days_left"])}天</span>'
         else:
@@ -96,14 +108,15 @@ def send_expiry_notice(db: Session, days: int = 30, recipients=None) -> dict:
           <td style="padding:6px 12px;border:1px solid #e2e8f0">{e['name']}</td>
           <td style="padding:6px 12px;border:1px solid #e2e8f0">{e['department']}</td>
           <td style="padding:6px 12px;border:1px solid #e2e8f0">{e['keeper']}</td>
-          <td style="padding:6px 12px;border:1px solid #e2e8f0">{e['expiry_date']}</td>
+          {calibration_cell}
+          <td style="padding:6px 12px;border:1px solid #e2e8f0">{e['due_date']}</td>
           <td style="padding:6px 12px;border:1px solid #e2e8f0">{tag}</td>
         </tr>"""
 
     html = f"""
     <div style="font-family:'Microsoft YaHei',sans-serif;max-width:800px;margin:0 auto">
-      <h2 style="color:#dc2626">医疗设备到期提醒</h2>
-      <p>以下设备将在 <strong>{days} 天</strong>内到期或已过期，请及时处理：</p>
+      <h2 style="color:#dc2626">{title}</h2>
+      <p>以下设备将在 <strong>{days} 天</strong>内{'校准' if calibration else ''}到期或已过期，请及时处理：</p>
       <table style="border-collapse:collapse;width:100%;font-size:13px">
         <thead>
           <tr style="background:#f8fafc">
@@ -111,7 +124,8 @@ def send_expiry_notice(db: Session, days: int = 30, recipients=None) -> dict:
             <th style="padding:8px 12px;border:1px solid #e2e8f0">设备名称</th>
             <th style="padding:8px 12px;border:1px solid #e2e8f0">科室</th>
             <th style="padding:8px 12px;border:1px solid #e2e8f0">保管人</th>
-            <th style="padding:8px 12px;border:1px solid #e2e8f0">到期日期</th>
+            {calibration_header}
+            <th style="padding:8px 12px;border:1px solid #e2e8f0">{date_title}</th>
             <th style="padding:8px 12px;border:1px solid #e2e8f0">状态</th>
           </tr>
         </thead>
@@ -120,7 +134,7 @@ def send_expiry_notice(db: Session, days: int = 30, recipients=None) -> dict:
       <p style="color:#94a3b8;font-size:12px;margin-top:16px">此邮件由固定资产管理系统自动发送</p>
     </div>
     """
-    subject = f"【到期提醒】{len(expiring)}台医疗设备{days}天内到期"
+    subject = f"【{'校准到期提醒' if calibration else '到期提醒'}】{len(expiring)}台医疗设备{days}天内到期"
     result = send_email(recipients or [], subject, html)
     result["count"] = len(expiring)
     return result

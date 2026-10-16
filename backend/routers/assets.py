@@ -1,9 +1,10 @@
 from numbering import next_asset_number
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from datetime import date
-from typing import Optional
+from typing import Optional, Literal
+from medical_dates import validate_calibration_dates
 from database import get_db, get_write_db
 from models import ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, OperationLog, User, Department
 from deps import get_current_user, require_perm, scope_query, check_scope, require_any
@@ -131,6 +132,7 @@ class MedicalAssetIn(BaseModel):
     model: Optional[str] = None
     department: Optional[str] = None
     keeper: Optional[str] = None
+    calibration_date: Optional[date] = None
     calibration_expiry: Optional[date] = None
     status: str = "idle"
     warranty_expiry: Optional[str] = None
@@ -138,6 +140,11 @@ class MedicalAssetIn(BaseModel):
     use_years: Optional[float] = None
     expiry_date: Optional[date] = None
     notes: Optional[str] = None
+
+    @model_validator(mode='after')
+    def valid_calibration_period(self):
+        validate_calibration_dates(self.calibration_date, self.calibration_expiry)
+        return self
 
 @router.get("/medical")
 def list_medical(db: Session = Depends(get_db), current_user: User = Depends(require_any("assets", "assets_write", "import", "export", "reports", "idle", "scrapped", "apply", "transfer", "scrap", "approval"))):
@@ -166,10 +173,16 @@ def update_medical(item_id: int, data: MedicalAssetIn, db: Session = Depends(get
         raise HTTPException(404, "设备不存在")
     if item.status == "scrapped":
         raise HTTPException(400, "已报废设备不能直接编辑，如需恢复请走审批流程")
+    try:
+        validate_calibration_dates(data.calibration_date if 'calibration_date' in data.model_fields_set else item.calibration_date,
+                                   data.calibration_expiry if 'calibration_expiry' in data.model_fields_set else item.calibration_expiry)
+    except ValueError as error:
+        raise HTTPException(400, str(error))
     if db.query(MedicalAsset).filter(MedicalAsset.asset_number == data.asset_number, MedicalAsset.id != item_id).first():
         raise HTTPException(400, f"资产编号 {data.asset_number} 已存在")
-    data.status = "in_use" if data.keeper else "idle"
-    for k, v in data.dict().items():
+    keeper = data.keeper if 'keeper' in data.model_fields_set else item.keeper
+    data.status = "in_use" if keeper else "idle"
+    for k, v in data.model_dump(exclude_unset=True).items():
         setattr(item, k, v)
     sync_department_id(db, item)
     check_scope(item, current_user)
@@ -227,9 +240,11 @@ def update_number(item_id: int, data: PhoneNumberIn, db: Session = Depends(get_w
 
 # ===== 医疗设备到期提醒邮件 =====
 @router.get("/medical/expiring")
-def list_expiring(days: int = 30, db: Session = Depends(get_db), current_user: User = Depends(require_any("assets", "reports", "idle", "scrapped", "apply", "transfer", "scrap", "approval"))):
+def list_expiring(days: int = 30, reminder_type: Literal['expiry', 'calibration'] = 'expiry', db: Session = Depends(get_db), current_user: User = Depends(require_any("assets", "reports", "idle", "scrapped", "apply", "transfer", "scrap", "approval"))):
+    if not 1 <= days <= 365:
+        raise HTTPException(400, '提醒天数必须在1至365之间')
     from notifier import get_expiring_medical
-    return get_expiring_medical(db, days, current_user)
+    return get_expiring_medical(db, days, current_user, reminder_type)
 
 class ExpiryEmailIn(BaseModel):
     recipient_user_ids: list[int] = Field(min_length=1, max_length=100)
@@ -249,7 +264,7 @@ def notice_recipients(db: Session = Depends(get_db), current_user: User = Depend
 
 
 @router.post("/medical/send-expiry-email")
-def send_expiry_email(data: ExpiryEmailIn, days: int = 30, db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
+def send_expiry_email(data: ExpiryEmailIn, days: int = 30, reminder_type: Literal['expiry', 'calibration'] = 'expiry', db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
     require_global_notice_sender(current_user)
     if not 1 <= days <= 365:
         raise HTTPException(400, '提醒天数必须在1至365之间')
@@ -259,8 +274,8 @@ def send_expiry_email(data: ExpiryEmailIn, days: int = 30, db: Session = Depends
         raise HTTPException(400, '所选用户已停用、被删除或未填写邮箱，请刷新收件人列表')
     recipients = list(dict.fromkeys(u.email for u in users))
     from notifier import send_expiry_notice
-    result = send_expiry_notice(db, days, recipients)
-    db.add(OperationLog(user=current_user.name, module="邮件提醒", action="发送到期提醒",
+    result = send_expiry_notice(db, days, recipients, reminder_type)
+    db.add(OperationLog(user=current_user.name, module="邮件提醒", action="发送校准到期提醒" if reminder_type == 'calibration' else "发送到期提醒",
                         detail=f"到期提醒邮件，{result.get('count',0)}台设备: {result.get('message','')}"))
     db.commit()
     return result

@@ -57,6 +57,11 @@
       </div>
     </div>
 
+    <div v-if="canSeeMedical" class="panel" style="margin-bottom:20px;border-left:3px solid #d97706">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px"><h3>医疗设备校准到期提醒（30天内）</h3><ExpiryEmailDialog v-if="canSendEmail" reminder-type="calibration" /></div>
+      <p v-if="!calibrationList.length" style="color:#64748b;text-align:center;padding:12px">暂无校准到期设备</p>
+      <div v-for="item in calibrationList" :key="item.id" class="todo-item"><div><div>{{ item.asset_number }} {{ item.name }}</div><p style="font-size:12px;color:#64748b;margin-top:4px">校准到期：{{ item.calibration_expiry }} · 保管人：{{ item.keeper || '—' }}</p></div><span class="badge" :class="item._days < 0 ? 'red' : 'amber'">{{ item._days < 0 ? '已逾期'+Math.abs(item._days)+'天' : '剩余'+item._days+'天' }}</span></div>
+    </div>
     <div class="panel">
       <h3 style="margin-bottom:12px">各模块摘要</h3>
       <div class="module-grid">
@@ -73,6 +78,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import api from '../api'
+import { dueMedical } from '../medicalDates'
 import ExpiryEmailDialog from '../components/ExpiryEmailDialog.vue'
 
 const user = computed(() => JSON.parse(localStorage.getItem('user') || '{}'))
@@ -90,6 +96,8 @@ const deptCount = ref(0)
 const wechatCount = ref(0)
 const pendingCount = ref(0)
 const expiringList = ref([])
+const medicalAssets=ref([])
+const calibrationList=computed(()=>dueMedical(medicalAssets.value,'calibration_expiry',10))
 async function safeGet(url) {
   try { const r = await api.get(url); return r.data || [] } catch(e) { return [] }
 }
@@ -98,6 +106,7 @@ onMounted(async () => {
   const it = await safeGet('/assets/it')
   const ph = await safeGet('/assets/phone')
   const med = await safeGet('/assets/medical')
+  medicalAssets.value=med
   const del = await safeGet('/delete-request')
   const tr = await safeGet('/transfer')
   const num = await safeGet('/assets/numbers')
@@ -127,16 +136,7 @@ onMounted(async () => {
   wechatCount.value = wc.length
 
   // 医疗设备到期提醒：30天内到期或已过期
-  const today = new Date(); today.setHours(0,0,0,0)
-  expiringList.value = med
-    .filter(m => m.expiry_date && m.status !== 'scrapped')
-    .map(m => {
-      const d = new Date(m.expiry_date.substring(0,10))
-      return { ...m, _days: Math.ceil((d - today) / 86400000) }
-    })
-    .filter(m => m._days <= 30)
-    .sort((a, b) => a._days - b._days)
-    .slice(0, 10)
+  expiringList.value = dueMedical(med, 'expiry_date', 10)
 
   // 登录弹窗提醒：有到期设备且用户有医疗设备权限时自动弹窗
   if (canSeeMedical.value && expiringList.value.length > 0) {

@@ -1,10 +1,10 @@
 <template>
-  <button class="btn btn-outline" @click="open">发送提醒邮件</button>
+  <button class="btn btn-outline" @click="open">{{ reminderType === 'calibration' ? '发送校准提醒邮件' : '发送提醒邮件' }}</button>
   <Teleport to="body">
     <div v-if="visible" class="modal-mask" @click.self="close">
-      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="expiry-mail-title">
-        <h3 id="expiry-mail-title">选择提醒邮件收件人</h3>
-        <p class="hint">发送医疗设备30天内到期及已过期的提醒。邮箱来自“用户权限”中保存的用户资料。</p>
+      <section class="modal" role="dialog" aria-modal="true" :aria-labelledby="'expiry-mail-title-'+reminderType">
+        <h3 :id="'expiry-mail-title-'+reminderType">{{ reminderType === 'calibration' ? '选择校准提醒收件人' : '选择提醒邮件收件人' }}</h3>
+        <p class="hint">{{ reminderType === 'calibration' ? '发送医疗设备30天内校准到期及校准已逾期的提醒。' : '发送医疗设备30天内到期及已过期的提醒。' }}邮箱来自“用户权限”中保存的用户资料。</p>
         <p v-if="loading">正在加载收件人…</p>
         <template v-else>
           <p v-if="!configured" class="warning">服务器尚未配置发件邮箱和SMTP授权码，完成配置后才能发送。</p>
@@ -20,6 +20,7 @@
 <script setup>
 import { ref } from 'vue'
 import api from '../api'
+const props=defineProps({reminderType:{type:String,default:'expiry'}})
 const visible=ref(false),loading=ref(false),sending=ref(false),configured=ref(false),success=ref(false),recipients=ref([]),selected=ref([]),message=ref('')
 function close(){if(!sending.value)visible.value=false}
 async function open(){
@@ -31,7 +32,7 @@ async function open(){
 async function send(){
   if(sending.value || !configured.value || !selected.value.length || success.value)return
   sending.value=true;message.value=''
-  try{const {data}=await api.post('/assets/medical/send-expiry-email?days=30',{recipient_user_ids:selected.value});success.value=data.success===true;message.value=data.message}
+  try{const {data}=await api.post('/assets/medical/send-expiry-email?days=30'+(props.reminderType==='calibration'?'&reminder_type=calibration':''),{recipient_user_ids:selected.value});success.value=data.success===true;message.value=data.message}
   catch(e){message.value=typeof e.response?.data?.detail==='string'?e.response.data.detail:'发送失败，请重试'}
   finally{sending.value=false}
 }

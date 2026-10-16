@@ -83,6 +83,7 @@ class MedicalAsset(Base):
     department = Column(String(50))                   # 科室
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
     keeper = Column(String(50))                       # 保管人
+    calibration_date = Column(Date)                   # 最近校准时间
     calibration_expiry = Column(Date)                 # 校准到期日
     status = Column(String(20), default="in_use")
     warranty_expiry = Column(String(50))

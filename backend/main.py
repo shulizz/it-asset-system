@@ -16,7 +16,7 @@ with engine.connect() as conn:
         "users": ["role_id INTEGER", "department_id INTEGER", "permissions TEXT", "data_scope VARCHAR(20)", "email VARCHAR(254)"],
         "it_assets": ["department_id INTEGER"],
         "phone_assets": ["department_id INTEGER"],
-        "medical_assets": ["department_id INTEGER"],
+        "medical_assets": ["department_id INTEGER", "calibration_date DATE", "calibration_expiry DATE"],
         "phone_numbers": ["department_id INTEGER"],
     }
     for table, columns in id_columns.items():
