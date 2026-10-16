@@ -96,37 +96,30 @@ const deptCount = ref(0)
 const wechatCount = ref(0)
 const pendingCount = ref(0)
 const expiringList = ref([])
-const medicalAssets=ref([])
-const calibrationList=computed(()=>dueMedical(medicalAssets.value,'calibration_expiry',10))
+const calibrationList=ref([])
 async function safeGet(url) {
   try { const r = await api.get(url); return r.data || [] } catch(e) { return [] }
 }
 
 onMounted(async () => {
-  const it = await safeGet('/assets/it')
-  const ph = await safeGet('/assets/phone')
-  const med = await safeGet('/assets/medical')
-  medicalAssets.value=med
-  const del = await safeGet('/delete-request')
-  const tr = await safeGet('/transfer')
-  const num = await safeGet('/assets/numbers')
-  const dept = await safeGet('/departments')
-  const scrap = await safeGet('/scrap')
-  const wc = await safeGet('/wechat')
+  const [it,ph,med,del,tr,num,dept,scrap,wc]=await Promise.all([
+    '/assets/it','/assets/phone','/assets/medical','/delete-request','/transfer',
+    '/assets/numbers','/departments','/scrap','/wechat'
+  ].map(safeGet))
+  calibrationList.value=dueMedical(med,'calibration_expiry',10)
 
   // 全部资产类型纳入统计：IT设备、手机、医疗、电话号码、微信
-  const allAssets = [...it, ...ph, ...med, ...num, ...wc]
-  stats.value.total = allAssets.length
-  stats.value.inUse = allAssets.filter(i => i.status === 'in_use').length
-  stats.value.idle = allAssets.filter(i => i.status === 'idle').length
+  const totals={total:0,inUse:0,idle:0}
+  for(const assets of [it,ph,med,num,wc]){
+    totals.total+=assets.length
+    for(const item of assets){if(item.status==='in_use')totals.inUse++;else if(item.status==='idle')totals.idle++}
+  }
+  stats.value=totals
 
-  pendingList.value = del.filter(d => d.status === 'pending').slice(0, 5)
-  pendingCount.value = del.filter(d => d.status === 'pending').length
-  const scrapPending = scrap.filter(s => s.status === 'pending_approval')
-  pendingCount.value += scrapPending.length
-  scrapPending.slice(0, 5).forEach(s => {
-    pendingList.value.push({ id: 'scrap_' + s.id, record_desc: '报废申请：' + s.asset_desc, reason: s.reason || '', type: 'scrap' })
-  })
+  const pending=[];let count=0,scrapShown=0
+  for(const item of del){if(item.status==='pending'){count++;if(pending.length<5)pending.push(item)}}
+  for(const item of scrap){if(item.status==='pending_approval'){count++;if(scrapShown<5){pending.push({id:'scrap_'+item.id,record_desc:'报废申请：'+item.asset_desc,reason:item.reason || '',type:'scrap'});scrapShown++}}}
+  pendingList.value=pending;pendingCount.value=count
 
   transferList.value = tr.slice(0, 5)
   phoneCount.value = ph.length

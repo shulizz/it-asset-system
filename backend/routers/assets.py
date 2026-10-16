@@ -264,7 +264,7 @@ def notice_recipients(db: Session = Depends(get_db), current_user: User = Depend
 
 
 @router.post("/medical/send-expiry-email")
-def send_expiry_email(data: ExpiryEmailIn, days: int = 30, reminder_type: Literal['expiry', 'calibration'] = 'expiry', db: Session = Depends(get_write_db), current_user: User = Depends(require_perm("assets_write"))):
+def send_expiry_email(data: ExpiryEmailIn, days: int = 30, reminder_type: Literal['expiry', 'calibration'] = 'expiry', db: Session = Depends(get_db), current_user: User = Depends(require_perm("assets_write"))):
     require_global_notice_sender(current_user)
     if not 1 <= days <= 365:
         raise HTTPException(400, '提醒天数必须在1至365之间')

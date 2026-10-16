@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from datetime import date, timedelta
 
 workspace = tempfile.TemporaryDirectory(prefix='asset-regression-')
@@ -29,6 +30,74 @@ from models import MedicalAsset
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_large_export_spools_to_disk_chunks_and_closes(self):
+        import asyncio
+        import excel_output
+        streams=[]
+        original=excel_output.SpooledTemporaryFile
+        def track_stream(*args,**kwargs):
+            stream=original(*args,**kwargs);streams.append(stream);return stream
+        class LargeWorkbook:
+            def save(self,stream):
+                stream.write(b'x'*(2*1024*1024+17))
+            def close(self):
+                pass
+        async def consume(response):
+            sizes=[len(chunk) async for chunk in response.body_iterator]
+            await response.background()
+            return sizes
+        with patch.object(excel_output,'SpooledTemporaryFile',side_effect=track_stream):
+            response=excel_output.workbook_response(LargeWorkbook(),'test.xlsx')
+            self.assertTrue(streams[0]._rolled)
+            sizes=asyncio.run(consume(response))
+            self.assertEqual(sum(sizes),2*1024*1024+17)
+            self.assertLessEqual(max(sizes),64*1024)
+            self.assertTrue(streams[0].closed)
+            response=excel_output.workbook_response(LargeWorkbook(),'test.xlsx')
+            asyncio.run(response.background())
+            self.assertTrue(streams[1].closed)
+
+    def test_slow_smtp_does_not_block_other_asset_writes(self):
+        entered, release = Event(), Event()
+        with SessionLocal() as db:
+            db.get(User,2).email='recipient@qq.com'
+            db.add(MedicalAsset(asset_number='SMTP-1',name='测试设备',expiry_date=date.today()))
+            db.commit()
+        def slow_send(*args, **kwargs):
+            entered.set()
+            if not release.wait(8):
+                raise RuntimeError('SMTP test timed out')
+            return {'success':True,'message':'测试发送'}
+        with patch('notifier.send_email',side_effect=slow_send), ThreadPoolExecutor(max_workers=2) as pool:
+            sending=pool.submit(self.client.post,'/api/assets/medical/send-expiry-email',headers=self.headers(1),json={'recipient_user_ids':[2]})
+            try:
+                self.assertTrue(entered.wait(3),'SMTP was not reached')
+                writing=pool.submit(self.client.post,'/api/assets/it',headers=self.headers(1),json={'name':'邮件期间正常保存'})
+                response=writing.result(timeout=3)
+                self.assertEqual(response.status_code,200,response.text)
+            finally:
+                release.set()
+            self.assertEqual(sending.result(timeout=3).status_code,200)
+
+    def test_streamed_exports_preserve_text_dates_and_hide_passwords(self):
+        with SessionLocal() as db:
+            db.add(MedicalAsset(asset_number='TEXT-1',name='=1+1',notes='#N/A',department='=部门',calibration_date=date(2026,1,1),calibration_expiry=date(2026,12,31)))
+            db.add(WeChatAccount(wx_account='export-account',wx_password=encrypt_credential('never-export-this')))
+            db.commit()
+        for url in ['/api/ie/medical/export','/api/reports/export']:
+            response=self.client.get(url,headers=self.headers(1))
+            self.assertEqual(response.status_code,200)
+            with BytesIO(response.content) as source:
+                book=openpyxl.load_workbook(source)
+                cells=[cell for sheet in book for row in sheet for cell in row]
+                literal=next(cell for cell in cells if cell.value=='=1+1')
+                self.assertEqual(literal.data_type,'s')
+                self.assertEqual(next(cell for cell in cells if cell.value=='#N/A').data_type,'s')
+                self.assertTrue(any(str(cell.value).startswith('2026-12-31') for cell in cells))
+                self.assertFalse(any(cell.value=='never-export-this' for cell in cells))
+                self.assertFalse(any(cell.value=='微信密码' for cell in cells))
+                book.close()
+
     def test_medical_calibration_create_update_and_optional_dates(self):
         payload={'name':'校准设备','department':'甲部门','keeper':'保管人','calibration_date':'2026-01-01','calibration_expiry':'2026-12-31'}
         response=self.client.post('/api/assets/medical',headers=self.headers(1),json=payload)

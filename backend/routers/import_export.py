@@ -15,6 +15,7 @@ from deps import get_current_user, get_user_permissions, scope_query, check_scop
 from credential_crypto import encrypt_credential
 from permissions import module_permission
 from excel_input import MAX_UPLOAD, read_rows
+from excel_output import append_text_row,workbook_response
 
 router = APIRouter(prefix="/api/ie", tags=["导入导出"])
 
@@ -182,13 +183,11 @@ def export_excel(
     cfg = _get_module(module)
     _authorize_module(module, current_user, db)
     model = cfg["model"]
-    rows = scope_query(db.query(model), model, current_user).all() if hasattr(model, "department") else db.query(model).all()
+    query = scope_query(db.query(model), model, current_user) if hasattr(model, "department") else db.query(model)
 
     import openpyxl
-    from urllib.parse import quote
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = cfg["label"]
+    wb = openpyxl.Workbook(write_only=True)
+    ws = wb.create_sheet(cfg["label"])
 
     # 表头
     export_fields = [
@@ -197,25 +196,18 @@ def export_excel(
     ]
     headers = [f[0] for f in export_fields]
     ws.append(headers)
+    rows=query.with_entities(*(getattr(model,field[1]) for field in export_fields)).yield_per(500)
 
     for row in rows:
         line = []
-        for cn_name, field_name, _ in export_fields:
-            v = getattr(row, field_name, None)
+        for v in row:
             if isinstance(v, date):
                 v = v.strftime("%Y-%m-%d")
             line.append(v if v is not None else "")
-        ws.append(line)
+        append_text_row(ws,line)
 
-    buf = BytesIO()
-    wb.save(buf)
-    buf.seek(0)
     filename = f"{cfg['label']}_导出_{date.today().strftime('%Y%m%d')}.xlsx"
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
-    )
+    return workbook_response(wb,filename)
 
 
 @router.get("/{module}/template")

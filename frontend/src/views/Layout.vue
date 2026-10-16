@@ -68,11 +68,16 @@ const pageTitle = computed(() => pageNames[route.path.split('/')[1]] || '工作�
 const scopeText = computed(() => user.value.role === 'super_admin' || user.value.data_scope === 'all' ? '全部部门' : (user.value.department || '当前权限范围'))
 
 let refreshTimer
+let refreshing=false,refreshController
 async function refreshUser() {
-  try { const { data } = await api.get('/auth/me'); user.value = data; localStorage.setItem('user', JSON.stringify(data)) } catch (e) { if (e.response?.status === 401) logout() }
+  if(refreshing)return
+  refreshing=true;refreshController=new AbortController()
+  try { const { data } = await api.get('/auth/me',{signal:refreshController.signal}); user.value = data; localStorage.setItem('user', JSON.stringify(data)) } catch (e) { if (e.response?.status === 401) logout() }
+  finally{refreshing=false}
 }
-onMounted(() => { refreshUser(); refreshTimer = setInterval(refreshUser, 15000) })
-onUnmounted(() => clearInterval(refreshTimer))
+function refreshVisibleUser(){if(!document.hidden)refreshUser()}
+onMounted(() => { refreshUser(); refreshTimer = setInterval(refreshVisibleUser, 15000);document.addEventListener('visibilitychange',refreshVisibleUser) })
+onUnmounted(() => {clearInterval(refreshTimer);document.removeEventListener('visibilitychange',refreshVisibleUser);refreshController?.abort()})
 import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()

@@ -9,8 +9,16 @@ export function daysUntil(value, today = new Date()) {
 }
 
 export function dueMedical(assets, field, limit = Infinity) {
-  return assets.filter(item => !['scrapped', 'archived'].includes(item.status))
-    .map(item => ({...item, _days: daysUntil(item[field])}))
-    .filter(item => item._days !== null && item._days <= 30)
-    .sort((a, b) => a._days - b._days).slice(0, limit)
+  const due=[]
+  if(limit<=0)return due
+  for(const item of assets){
+    if(item.status==='scrapped' || item.status==='archived')continue
+    const days=daysUntil(item[field])
+    if(days===null || days>30)continue
+    if(limit===Infinity){due.push({...item,_days:days});continue}
+    let position=due.findIndex(existing=>existing._days>days)
+    if(position<0)position=due.length
+    if(position<limit){due.splice(position,0,{...item,_days:days});if(due.length>limit)due.pop()}
+  }
+  return limit===Infinity ? due.sort((a,b)=>a._days-b._days) : due
 }

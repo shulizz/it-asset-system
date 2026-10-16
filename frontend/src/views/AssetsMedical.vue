@@ -21,7 +21,7 @@
       </select>
     </div>
     <section class="calibration-notice">
-      <div><h3>校准到期提醒</h3><p>30天内到期 {{ calibrationDue.filter(item => item._days >= 0).length }} 台，已逾期 {{ calibrationDue.filter(item => item._days < 0).length }} 台</p></div>
+      <div><h3>校准到期提醒</h3><p>30天内到期 {{ calibrationCounts.upcoming }} 台，已逾期 {{ calibrationCounts.overdue }} 台</p></div>
       <ExpiryEmailDialog v-if="canSendEmail" reminder-type="calibration" />
     </section>
     <div class="panel">
@@ -83,7 +83,7 @@ import DeleteRequestDialog from '../components/DeleteRequestDialog.vue'
 const deleteTarget = ref(null)
 import ImportExportButtons from '../components/ImportExportButtons.vue'
 import ExpiryEmailDialog from '../components/ExpiryEmailDialog.vue'
-import { daysUntil, dueMedical } from '../medicalDates'
+import { daysUntil } from '../medicalDates'
 const list = ref([]), showForm = ref(false), deptList = ref([])
 const filter = ref({ keyword:'', department:'', status:'' })
 const filteredList = computed(() => {
@@ -100,7 +100,7 @@ const filteredList = computed(() => {
 })
 const emptyForm=()=>({ id:null, asset_number:'', name:'', model:'', department:'', keeper:'', use_years:null, expiry_date:'', calibration_date:'', calibration_expiry:'' })
 const form=ref(emptyForm()),formError=ref(''),saving=ref(false)
-const calibrationDue=computed(()=>dueMedical(list.value,'calibration_expiry'))
+const calibrationCounts=computed(()=>{const result={upcoming:0,overdue:0};for(const item of list.value){if(['scrapped','archived'].includes(item.status))continue;const days=daysUntil(item.calibration_expiry);if(days!==null && days<=30){if(days<0)result.overdue++;else result.upcoming++}}return result})
 const canSendEmail=computed(()=>{const user=JSON.parse(localStorage.getItem('user')||'{}');return canWriteAssets.value && (user.role==='super_admin' || user.data_scope==='all')})
 function openForm(){form.value=emptyForm();formError.value='';showForm.value=true}
 async function load(){ const res = await api.get('/assets/medical'); list.value = res.data }
