@@ -1,10 +1,10 @@
 """Encryption helpers for recoverable third-party credentials stored in SQLite."""
+
 import base64
 import hashlib
 import os
 
 from cryptography.fernet import Fernet, InvalidToken
-
 
 _PREFIX = "enc:v1:"
 
@@ -28,7 +28,9 @@ def decrypt_credential(value):
     if value is None or not value.startswith(_PREFIX):
         return value  # legacy plaintext; new writes are always encrypted
     try:
-        token = value[len(_PREFIX):].encode("ascii")
+        token = value[len(_PREFIX) :].encode("ascii")
         return _fernet().decrypt(token).decode("utf-8")
     except (InvalidToken, UnicodeError, ValueError) as exc:
-        raise RuntimeError("Stored credential cannot be decrypted; verify IT_ASSET_SECRET_KEY") from exc
+        raise RuntimeError(
+            "Stored credential cannot be decrypted; verify IT_ASSET_SECRET_KEY"
+        ) from exc

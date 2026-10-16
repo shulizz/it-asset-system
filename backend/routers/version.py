@@ -1,14 +1,17 @@
-﻿from fastapi import APIRouter
-from fastapi.responses import FileResponse
 import os
+
+from fastapi import APIRouter
+from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/api/version", tags=["version"])
 
 CURRENT_VERSION = "1.2.3"
 
+
 @router.get("")
 def get_version():
     return {"version": CURRENT_VERSION, "download_url": "/api/version/download"}
+
 
 @router.get("/download")
 def download_client():

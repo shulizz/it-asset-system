@@ -1,12 +1,14 @@
-import { ref, computed, onMounted } from 'vue'
-import api from './api'
+import { computed, onMounted } from 'vue'
+import { currentUser, refreshCurrentUser } from './userState'
 
 export function usePermissions() {
-  const permissions = ref([])
-  const canWriteAssets = computed(() => permissions.value.includes('assets_write'))
+  const canWriteAssets = computed(() =>
+    (currentUser.value.permissions || []).includes('assets_write'),
+  )
   onMounted(async () => {
-    try { permissions.value = (await api.get('/auth/me')).data.permissions || [] }
-    catch { permissions.value = [] }
+    try {
+      await refreshCurrentUser()
+    } catch {}
   })
   return { canWriteAssets }
 }

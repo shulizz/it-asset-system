@@ -1,45 +1,34 @@
+import logging
+import os
+
+from database import Base, SessionLocal, engine
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import os
-from database import engine, SessionLocal, Base
-from models import User, Department, Role
+from fastapi.staticfiles import StaticFiles
+from models import Department, Role, User
 from passlib.context import CryptContext
-from routers import auth, assets, transfer, scrap, delete_req, logs, departments, backup, version, wechat, import_export, reports, user_import
+from routers import (
+    assets,
+    auth,
+    backup,
+    delete_req,
+    departments,
+    import_export,
+    logs,
+    reports,
+    scrap,
+    transfer,
+    user_import,
+    version,
+    wechat,
+)
 
 Base.metadata.create_all(bind=engine)
 
-from sqlalchemy import text
-with engine.connect() as conn:
-    id_columns = {
-        "users": ["role_id INTEGER", "department_id INTEGER", "permissions TEXT", "data_scope VARCHAR(20)", "email VARCHAR(254)"],
-        "it_assets": ["department_id INTEGER"],
-        "phone_assets": ["department_id INTEGER"],
-        "medical_assets": ["department_id INTEGER", "calibration_date DATE", "calibration_expiry DATE"],
-        "phone_numbers": ["department_id INTEGER"],
-    }
-    for table, columns in id_columns.items():
-        existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
-        for column in columns:
-            column_name = column.split()[0]
-            if column_name not in existing:
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column}"))
-    for table in ["users", "it_assets", "phone_assets", "medical_assets", "phone_numbers"]:
-        if table != 'users':
-            conn.execute(text(f"UPDATE {table} SET department=NULL WHERE trim(coalesce(department, ''))=''"))
-        conn.execute(text(f"INSERT OR IGNORE INTO departments(name, note) SELECT DISTINCT trim(department), '历史数据自动迁移' FROM {table} WHERE department IS NOT NULL AND trim(department)<>''"))
-        conn.execute(text(f"UPDATE {table} SET department_id=(SELECT id FROM departments WHERE departments.name={table}.department) WHERE department_id IS NULL AND department IS NOT NULL"))
-    conn.execute(text("UPDATE users SET data_scope=CASE WHEN role IN ('super_admin','asset_admin') THEN 'all' ELSE 'department' END WHERE data_scope IS NULL"))
-    conn.commit()
-    for col in ['new_user VARCHAR(50)', 'new_dept VARCHAR(50)', 'model VARCHAR(100)', 'notes VARCHAR(500)']:
-        try:
-            conn.execute(text(f"ALTER TABLE it_assets ADD COLUMN {col}"))
-            conn.commit()
-        except: pass
+from migrations import migrate_schema
 
-from migrations import migrate_workflow
-migrate_workflow(engine)
+migrate_schema(engine)
 
 app = FastAPI(title="IT资产管理系统 API")
 
@@ -68,6 +57,7 @@ app.include_router(user_import.router)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+
 @app.on_event("startup")
 def seed_admin():
     db = SessionLocal()
@@ -85,7 +75,7 @@ def seed_admin():
             name="管理员",
             role="super_admin",
             department="IT部",
-            is_active=1
+            is_active=1,
         )
         db.add(admin)
         db.commit()
@@ -93,40 +83,65 @@ def seed_admin():
         for name in ["IT部", "研发部", "市场部", "财务部", "行政部", "管理层"]:
             db.add(Department(name=name))
         db.commit()
-    from deps import get_user_permissions
     import json
+
+    from deps import get_user_permissions
+
     for user in db.query(User).filter(User.permissions.is_(None)).all():
         # Preserve legacy grants once; runtime access never depends on a role template.
-        legacy_role = db.get(Role, user.role_id) if user.role_id else db.query(Role).filter(Role.name == user.role).first()
+        legacy_role = (
+            db.get(Role, user.role_id)
+            if user.role_id
+            else db.query(Role).filter(Role.name == user.role).first()
+        )
         from permissions import PERMISSION_KEYS
+
         try:
-            legacy = json.loads(legacy_role.permissions) if legacy_role and legacy_role.permissions else []
-            grants = sorted(PERMISSION_KEYS.intersection(p for p in legacy if isinstance(p, str))) if isinstance(legacy, list) else []
+            legacy = (
+                json.loads(legacy_role.permissions)
+                if legacy_role and legacy_role.permissions
+                else []
+            )
+            grants = (
+                sorted(PERMISSION_KEYS.intersection(p for p in legacy if isinstance(p, str)))
+                if isinstance(legacy, list)
+                else []
+            )
         except (ValueError, TypeError):
             grants = []
-        user.permissions = json.dumps(get_user_permissions(user, db) if user.role == 'super_admin' else grants)
+        user.permissions = json.dumps(
+            get_user_permissions(user, db) if user.role == "super_admin" else grants
+        )
         if user.department and not user.department_id:
             department = db.query(Department).filter(Department.name == user.department).first()
             user.department_id = department.id if department else None
     db.commit()
     from routers.backup import do_backup
-    try: do_backup()
-    except: pass
-    db.close()
+
+    try:
+        do_backup()
+    except Exception:
+        logging.getLogger(__name__).exception("Startup database backup failed")
+    finally:
+        db.close()
+
 
 frontend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
 if os.path.exists(frontend_dir):
     app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dir, "assets")), name="assets")
 
+
 @app.get("/")
 def index():
     f = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "index.html")
-    if os.path.exists(f): return FileResponse(f)
+    if os.path.exists(f):
+        return FileResponse(f)
     return {"status": "ok", "app": "IT资产管理系统"}
+
 
 @app.get("/{full_path:path}")
 def spa(full_path: str):
     idx = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "index.html")
-    if os.path.exists(idx): return FileResponse(idx)
+    if os.path.exists(idx):
+        return FileResponse(idx)
     return {"status": "ok"}
-

@@ -17,15 +17,15 @@
 - **用户表格导入**：超级管理员在用户权限页下载模板，批量新增普通用户（每批最多100人）。表格可填写初始密码、邮箱、角色名称、已有部门、数据范围及独立权限；任意行出错则整批不写入，已有账号不覆盖。权限留空表示无操作权限，超级管理员账号通过页面手动创建。
 - **医疗校准管理**：医疗设备支持可选的校准时间与校准到期时间，列表显示校准剩余天数；工作台和医疗模块可选择用户发送30天内校准到期及逾期邮件，与设备使用期限到期提醒分别处理。仅填写的校准到期时间参与提醒，已报废或已移出档案的设备排除。模板、导入和导出支持两个日期，旧模板“校准到期”列仍兼容；到期时间不得早于校准时间。邮件通过页面手动选择收件人发送，不自动批量发信。
 - **报表统计**：设备台账、部门统计、闲置清单，支持导出Excel
-- **操作日志**：所有操作全程留痕
-- **自动备份**：数据库定时备份
+- **操作日志**：记录关键业务操作
+- **数据库备份**：启动时备份，超级管理员也可手动备份和下载
 
 ## 技术栈
 
 - **后端**：Python FastAPI + SQLite
 - **前端**：Vue 3 + Vite
 - **桌面客户端**：Electron（免安装版）
-- **部署**：Windows服务器 + 内网穿透（ngrok/cpolar/cloudflared）
+- **部署**：Windows 服务器 + Caddy HTTPS 域名入口；后端仅监听本机
 
 ## 快速启动
 
@@ -33,8 +33,9 @@
 ```bash
 set IT_ASSET_SECRET_KEY=请设置高强度随机密钥
 set IT_ASSET_BOOTSTRAP_PASSWORD=首次部署时的管理员密码
-pip install -r requirements.txt
-python -m uvicorn main:app --host 0.0.0.0 --port 8000
+pip install -r backend/requirements.txt
+cd backend
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
 `IT_ASSET_SECRET_KEY` 是必填项。只有数据库尚无用户时才需要
@@ -43,14 +44,14 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ### 前端开发
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
 ### 构建桌面客户端
 ```bash
-npm run build
-# 然后将 dist/ 内容拷贝到 Electron 运行时 resources/app/
+npm run electron:build
+# 打包入口读取 dist/index.html；默认连接 https://slzz.cloud
 ```
 
 ## 截图
@@ -74,11 +75,13 @@ npm run build
 从仓库根目录运行，测试会创建临时数据库和临时备份目录，不连接生产服务：
 
 ```bash
-python -m pip install httpx
+python -m pip install -r requirements-dev.txt
+ruff check backend maintenance
+ruff format --check backend maintenance
 python -m unittest discover -s backend/tests -v
 cd frontend
-node tests/workflow.cjs
-node tests/performance.cjs
+npm run format:check
+npm test
 npm run build
 ```
 
@@ -91,3 +94,13 @@ npm run build
 - 账号状态仍每 15 秒刷新；后台标签页暂停轮询，切回时立即刷新，慢请求不会重复叠加。权限仍由后端逐请求校验。
 - 发送提醒邮件不再提前占用 SQLite 写锁，邮件等待期间可以保存其他业务。审批等业务写入仍使用原有串行校验。
 - 隔离测试覆盖慢邮件期间的写入、导出文本与日期，以及并行加载、到期排序和轮询清理；测试不会发送真实邮件。
+
+## 维护和代码规范
+
+- 当前发布入口及只读数据库检查见 [维护说明](maintenance/README.md)。旧目录、旧 ngrok、无保护清库及全进程重启脚本已退出发行。
+- Python 使用 Ruff，前端使用 Prettier；前端统一 npm 11.6.2 和 package-lock.json，不混用 pnpm 锁文件。格式化命令为 `ruff format backend maintenance` 及前端 `npm run format`。GitHub Checks 工作流执行静态检查、回归测试和生产构建。
+- 独立角色权限管理已删除，但旧角色表、历史迁移、旧接口的明确退役响应仍保留，保障历史升级兼容。
+- 资产更新只覆盖明确提交的字段；未提交字段保留，明确传空值才清空可选字段。编号不能清空，普通流转不允许直接执行报废。
+- 登录密码验证在写锁外执行，发放登录令牌前再次核对账号状态和会话版本。单账号每分钟最多10次、单来源最多30次登录尝试，超过返回429并可在一分钟后重试；当前限流针对单进程部署。
+- 前端共享响应式用户状态，权限刷新请求合并；退出后迟到的响应不会恢复旧账号。
+- Excel 输出会在导出副本中移除 XML 不支持的控制字符，原数据库资料不变；构建失败也清理临时工作表文件。

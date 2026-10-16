@@ -1,13 +1,15 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, Text, Float, ForeignKey
-from sqlalchemy.orm import relationship
-from datetime import datetime
 import secrets
+from datetime import datetime
+
 from database import Base
+from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String, Text
+
 
 class AssetSequence(Base):
     __tablename__ = "asset_sequences"
     name = Column(String(50), primary_key=True)
     value = Column(Integer, nullable=False)
+
 
 # ===== 部门 =====
 class Department(Base):
@@ -17,12 +19,14 @@ class Department(Base):
     manager = Column(String(50))
     note = Column(String(200))
 
+
 # ===== 自定义角色 =====
 class Role(Base):
     __tablename__ = "roles"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50), unique=True, nullable=False)  # 角色名称，如"设备科科长"
     permissions = Column(Text, default="")  # JSON数组，权限key列表
+
 
 # ===== 用户 =====
 class User(Base):
@@ -32,14 +36,19 @@ class User(Base):
     password_hash = Column(String(200), nullable=False)
     name = Column(String(50), nullable=False)
     email = Column(String(254), nullable=True)
-    role = Column(String(50), nullable=False)  # Display label; reserved super_admin identifies administrators.
+    role = Column(
+        String(50), nullable=False
+    )  # Display label; reserved super_admin identifies administrators.
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=True, index=True)
     permissions = Column(Text, nullable=True)
     data_scope = Column(String(20), nullable=False, default="department")
     department = Column(String(50))
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
-    token_version = Column(Integer, nullable=False, default=lambda: secrets.randbits(53), server_default='0')
+    token_version = Column(
+        Integer, nullable=False, default=lambda: secrets.randbits(53), server_default="0"
+    )
     is_active = Column(Integer, default=1)  # 1启用 0停用
+
 
 # ===== IT设备 =====
 class ITAsset(Base):
@@ -47,16 +56,17 @@ class ITAsset(Base):
     id = Column(Integer, primary_key=True, index=True)
     asset_number = Column(String(50), unique=True, index=True, nullable=False)
     name = Column(String(100), nullable=False)
-    model = Column(String(100))                     # 型号
-    category = Column(String(50))                     # 笔记本/台式机/显示器/打印机/网络设备
-    user_name = Column(String(50))                    # 使用人
-    department = Column(String(50))                   # 部门
+    model = Column(String(100))  # 型号
+    category = Column(String(50))  # 笔记本/台式机/显示器/打印机/网络设备
+    user_name = Column(String(50))  # 使用人
+    department = Column(String(50))  # 部门
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
-    status = Column(String(20), default="in_use")     # in_use/idle/scrapped/archived
+    status = Column(String(20), default="in_use")  # in_use/idle/scrapped/archived
     purchase_date = Column(Date)
     warranty_expiry = Column(Date)
     price = Column(Float)
     notes = Column(Text)
+
 
 # ===== 手机设备 =====
 class PhoneAsset(Base):
@@ -65,13 +75,14 @@ class PhoneAsset(Base):
     asset_number = Column(String(50), unique=True, index=True, nullable=False)
     brand_model = Column(String(100), nullable=False)
     imei = Column(String(50))
-    bound_number = Column(String(20))               # 绑定号码
+    bound_number = Column(String(20))  # 绑定号码
     user_name = Column(String(50))
     department = Column(String(50))
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
     status = Column(String(20), default="in_use")
     purchase_date = Column(Date)
     notes = Column(Text)
+
 
 # ===== 医疗设备 =====
 class MedicalAsset(Base):
@@ -80,32 +91,34 @@ class MedicalAsset(Base):
     asset_number = Column(String(50), unique=True, index=True, nullable=False)
     name = Column(String(100), nullable=False)
     model = Column(String(100))
-    department = Column(String(50))                   # 科室
+    department = Column(String(50))  # 科室
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
-    keeper = Column(String(50))                       # 保管人
-    calibration_date = Column(Date)                   # 最近校准时间
-    calibration_expiry = Column(Date)                 # 校准到期日
+    keeper = Column(String(50))  # 保管人
+    calibration_date = Column(Date)  # 最近校准时间
+    calibration_expiry = Column(Date)  # 校准到期日
     status = Column(String(20), default="in_use")
     warranty_expiry = Column(String(50))
     purchase_date = Column(Date)
-    use_years = Column(Float)                         # 使用年限（年）
-    expiry_date = Column(Date)                        # 设备到期时间
+    use_years = Column(Float)  # 使用年限（年）
+    expiry_date = Column(Date)  # 设备到期时间
     notes = Column(Text)
+
 
 # ===== 电话号码 =====
 class PhoneNumber(Base):
     __tablename__ = "phone_numbers"
     id = Column(Integer, primary_key=True, index=True)
     number = Column(String(20), unique=True, index=True, nullable=False)
-    carrier = Column(String(20))                      # 移动/联通/电信
-    card_type = Column(String(20))                    # main(主卡)/sub(副卡)/landline(座机)
-    plan = Column(String(50))                         # 套餐
+    carrier = Column(String(20))  # 移动/联通/电信
+    card_type = Column(String(20))  # main(主卡)/sub(副卡)/landline(座机)
+    plan = Column(String(50))  # 套餐
     department = Column(String(50))
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
     user_name = Column(String(50))
-    bound_device = Column(String(100))                # 绑定设备
-    status = Column(String(20), default="in_use")     # in_use/idle/cancelled/unused
+    bound_device = Column(String(100))  # 绑定设备
+    status = Column(String(20), default="in_use")  # in_use/idle/cancelled/unused
     notes = Column(Text)
+
 
 # ===== 设备流转记录 =====
 class TransferRecord(Base):
@@ -128,6 +141,7 @@ class TransferRecord(Base):
     new_dept = Column(String(50))
     notes = Column(Text)
 
+
 # ===== 报废申请 =====
 class ScrapRequest(Base):
     department_id = Column(Integer, ForeignKey("departments.id"), index=True)
@@ -148,6 +162,7 @@ class ScrapRequest(Base):
     approve_date = Column(Date)
     notes = Column(Text)
 
+
 # ===== 删除申请 =====
 class DeleteRequest(Base):
     department_id = Column(Integer, ForeignKey("departments.id"), index=True)
@@ -160,15 +175,16 @@ class DeleteRequest(Base):
     asset_id = Column(Integer)
     __tablename__ = "delete_requests"
     id = Column(Integer, primary_key=True, index=True)
-    table_name = Column(String(50), nullable=False)   # 从哪张表删
-    record_id = Column(Integer, nullable=False)        # 删哪条
-    record_desc = Column(String(200))                 # 记录描述
+    table_name = Column(String(50), nullable=False)  # 从哪张表删
+    record_id = Column(Integer, nullable=False)  # 删哪条
+    record_desc = Column(String(200))  # 记录描述
     reason = Column(Text, nullable=False)
     applicant = Column(String(50))
-    status = Column(String(20), default="pending")     # pending/approved/rejected
+    status = Column(String(20), default="pending")  # pending/approved/rejected
     approver = Column(String(50))
     created_at = Column(DateTime, default=datetime.now)
     approved_at = Column(DateTime)
+
 
 # ===== 操作日志 =====
 class OperationLog(Base):
@@ -180,6 +196,8 @@ class OperationLog(Base):
     detail = Column(Text)
     ip = Column(String(50))
     created_at = Column(DateTime, default=datetime.now)
+
+
 # ===== 微信账号 =====
 class WeChatAccount(Base):
     __tablename__ = "wechat_accounts"

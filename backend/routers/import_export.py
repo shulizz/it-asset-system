@@ -1,21 +1,27 @@
-from numbering import next_asset_number
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
-from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-from sqlalchemy import inspect
-from io import BytesIO
 from datetime import date, datetime
-from typing import Optional, List
-from database import get_db, get_write_db
-from models import (
-    ITAsset, PhoneAsset, MedicalAsset, PhoneNumber, WeChatAccount,
-    Department, OperationLog, User
-)
-from deps import get_current_user, get_user_permissions, scope_query, check_scope
+from io import BytesIO
+
 from credential_crypto import encrypt_credential
-from permissions import module_permission
+from database import get_db, get_write_db
+from deps import get_current_user, get_user_permissions, scope_query
 from excel_input import MAX_UPLOAD, read_rows
-from excel_output import append_text_row,workbook_response
+from excel_output import append_text_row, export_workbook, workbook_response
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
+from models import (
+    Department,
+    ITAsset,
+    MedicalAsset,
+    OperationLog,
+    PhoneAsset,
+    PhoneNumber,
+    User,
+    WeChatAccount,
+)
+from numbering import next_asset_number
+from permissions import module_permission
+from sqlalchemy import inspect
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/ie", tags=["导入导出"])
 
@@ -132,17 +138,17 @@ def _get_module(name: str):
 
 def _authorize_module(module: str, user: User, db: Session, action="export"):
     required = module_permission(module)
-    if module in ('department', 'wechat') and user.role != 'super_admin' and user.data_scope != 'all':
-        raise HTTPException(403, '此模块需要全部部门数据范围')
+    if (
+        module in ("department", "wechat")
+        and user.role != "super_admin"
+        and user.data_scope != "all"
+    ):
+        raise HTTPException(403, "此模块需要全部部门数据范围")
     perms = get_user_permissions(user, db)
     if required not in perms or action not in perms:
         raise HTTPException(403, f"没有「{required}」权限")
     if module == "wechat" and action == "import" and "wechat_secret" not in perms:
         raise HTTPException(403, "导入微信账号需要查看和修改微信密码权限")
-
-
-def _gen_asset_number(db, model, prefix):
-    return next_asset_number(db, model, prefix)
 
 
 def _parse_date(val):
@@ -166,6 +172,7 @@ def _parse_float(val):
         return None
     try:
         import math
+
         value = float(val)
         if not math.isfinite(value):
             raise ValueError("数值必须为有限数字")
@@ -183,31 +190,37 @@ def export_excel(
     cfg = _get_module(module)
     _authorize_module(module, current_user, db)
     model = cfg["model"]
-    query = scope_query(db.query(model), model, current_user) if hasattr(model, "department") else db.query(model)
+    query = (
+        scope_query(db.query(model), model, current_user)
+        if hasattr(model, "department")
+        else db.query(model)
+    )
 
-    import openpyxl
-    wb = openpyxl.Workbook(write_only=True)
-    ws = wb.create_sheet(cfg["label"])
+    with export_workbook() as wb:
+        ws = wb.create_sheet(cfg["label"])
 
-    # 表头
-    export_fields = [
-        field for field in cfg["fields"]
-        if not (module == "wechat" and field[1] == "wx_password")
-    ]
-    headers = [f[0] for f in export_fields]
-    ws.append(headers)
-    rows=query.with_entities(*(getattr(model,field[1]) for field in export_fields)).yield_per(500)
+        # 表头
+        export_fields = [
+            field
+            for field in cfg["fields"]
+            if not (module == "wechat" and field[1] == "wx_password")
+        ]
+        headers = [f[0] for f in export_fields]
+        ws.append(headers)
+        rows = query.with_entities(
+            *(getattr(model, field[1]) for field in export_fields)
+        ).yield_per(500)
 
-    for row in rows:
-        line = []
-        for v in row:
-            if isinstance(v, date):
-                v = v.strftime("%Y-%m-%d")
-            line.append(v if v is not None else "")
-        append_text_row(ws,line)
+        for row in rows:
+            line = []
+            for v in row:
+                if isinstance(v, date):
+                    v = v.strftime("%Y-%m-%d")
+                line.append(v if v is not None else "")
+            append_text_row(ws, line)
 
-    filename = f"{cfg['label']}_导出_{date.today().strftime('%Y%m%d')}.xlsx"
-    return workbook_response(wb,filename)
+        filename = f"{cfg['label']}_导出_{date.today().strftime('%Y%m%d')}.xlsx"
+        return workbook_response(wb, filename)
 
 
 @router.get("/{module}/template")
@@ -219,7 +232,9 @@ def download_template(
     cfg = _get_module(module)
     _authorize_module(module, current_user, db, "import")
     from urllib.parse import quote
+
     import openpyxl
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = cfg["label"]
@@ -261,14 +276,18 @@ def import_excel(
     cfg = _get_module(module)
     _authorize_module(module, current_user, db, "import")
     model = cfg["model"]
-    if current_user.role != "super_admin" and current_user.data_scope != "all" and module in ("wechat", "department"):
+    if (
+        current_user.role != "super_admin"
+        and current_user.data_scope != "all"
+        and module in ("wechat", "department")
+    ):
         raise HTTPException(403, "该模块的批量导入需要全部部门数据范围")
 
     if not file.filename or not file.filename.lower().endswith(".xlsx"):
         raise HTTPException(400, "只允许上传 .xlsx 文件")
     content = file.file.read(MAX_UPLOAD + 1)
     if len(content) > MAX_UPLOAD:
-        raise HTTPException(413, '导入文件不能超过10MB')
+        raise HTTPException(413, "导入文件不能超过10MB")
     all_rows = read_rows(content)
     if len(all_rows) < 2:
         return {"imported": 0, "skipped": 0, "message": "文件中没有数据行"}
@@ -280,16 +299,14 @@ def import_excel(
         if cell is None:
             continue
         cn = str(cell).strip()
-        if module == 'medical' and cn == '校准到期':
-            cn = '校准到期时间'  # Accept previously downloaded medical templates.
+        if module == "medical" and cn == "校准到期":
+            cn = "校准到期时间"  # Accept previously downloaded medical templates.
         for cn_name, field_name, required in cfg["fields"]:
             if cn == cn_name:
                 col_map[idx] = field_name
                 break
 
-    required_fields = [(idx, fn) for idx, (cn, fn, req) in enumerate(cfg["fields"]) if req]
     # 找到必填列在 col_map 中的位置
-    required_cn = [cn for cn, fn, req in cfg["fields"] if req]
 
     imported = 0
     skipped = 0
@@ -311,29 +328,41 @@ def import_excel(
             continue
 
         try:
-            for cn_name, field_name, _ in cfg['fields']:
-                if field_name in ('purchase_date', 'calibration_date', 'calibration_expiry', 'expiry_date') or (field_name == 'warranty_expiry' and module != 'medical'):
+            for cn_name, field_name, _ in cfg["fields"]:
+                if field_name in (
+                    "purchase_date",
+                    "calibration_date",
+                    "calibration_expiry",
+                    "expiry_date",
+                ) or (field_name == "warranty_expiry" and module != "medical"):
                     data[field_name] = _parse_date(data.get(field_name))
-                elif field_name in ('price', 'use_years'):
+                elif field_name in ("price", "use_years"):
                     data[field_name] = _parse_float(data.get(field_name))
         except ValueError as error:
             skipped += 1
-            errors.append(f'第{row_idx}行：{cn_name}，{error}')
+            errors.append(f"第{row_idx}行：{cn_name}，{error}")
             continue
 
-        if module == 'medical':
+        if module == "medical":
             from medical_dates import validate_calibration_dates
+
             try:
-                validate_calibration_dates(data.get('calibration_date'), data.get('calibration_expiry'))
+                validate_calibration_dates(
+                    data.get("calibration_date"), data.get("calibration_expiry")
+                )
             except ValueError as error:
                 skipped += 1
-                errors.append(f'第{row_idx}行：{error}')
+                errors.append(f"第{row_idx}行：{error}")
                 continue
 
         # 去重检查
         unique_fields = {
-            "it": "asset_number", "phone": "asset_number", "medical": "asset_number",
-            "number": "number", "wechat": "wx_account", "department": "name",
+            "it": "asset_number",
+            "phone": "asset_number",
+            "medical": "asset_number",
+            "number": "number",
+            "wechat": "wx_account",
+            "department": "name",
         }
         uniq_field = unique_fields.get(module)
         if uniq_field and data.get(uniq_field):
@@ -344,7 +373,7 @@ def import_excel(
 
         # 资产编号自动生成
         if cfg["auto_number_prefix"] and not data.get("asset_number"):
-            data["asset_number"] = _gen_asset_number(db, model, cfg["auto_number_prefix"])
+            data["asset_number"] = next_asset_number(db, model, cfg["auto_number_prefix"])
 
         # 自动状态：有使用人→in_use，无使用人→idle
         if cfg["user_field"]:
@@ -364,7 +393,11 @@ def import_excel(
                     continue
             if target_name:
                 clean_data["department"] = target_name
-            department = db.query(Department).filter(Department.name == target_name).first() if target_name else None
+            department = (
+                db.query(Department).filter(Department.name == target_name).first()
+                if target_name
+                else None
+            )
             if target_name and not department:
                 skipped += 1
                 errors.append(f"第{row_idx}行：部门不存在，请先维护部门列表")
@@ -378,10 +411,17 @@ def import_excel(
             with db.begin_nested():
                 item = model(**clean_data)
                 db.add(item)
-                db.add(OperationLog(user=current_user.name, module=cfg["label"], action="导入", detail=f"导入数据: {clean_data.get('asset_number') or clean_data.get('number') or clean_data.get('wx_account') or clean_data.get('name')}"))
+                db.add(
+                    OperationLog(
+                        user=current_user.name,
+                        module=cfg["label"],
+                        action="导入",
+                        detail=f"导入数据: {clean_data.get('asset_number') or clean_data.get('number') or clean_data.get('wx_account') or clean_data.get('name')}",
+                    )
+                )
                 db.flush()
             imported += 1
-        except Exception as e:
+        except Exception:
             skipped += 1
             errors.append(f"第{row_idx}行：数据不符合格式或存在重复记录")
 
@@ -394,5 +434,5 @@ def import_excel(
         "imported": imported,
         "skipped": skipped,
         "errors": errors[:20],
-        "message": f"成功导入 {imported} 条，跳过 {skipped} 条"
+        "message": f"成功导入 {imported} 条，跳过 {skipped} 条",
     }

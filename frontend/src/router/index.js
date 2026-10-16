@@ -41,14 +41,14 @@ const routes = [
       { path: 'users', component: Users },
       { path: 'roles', redirect: '/users' },
       { path: 'departments', component: Departments },
-      { path: 'logs', component: Logs }
-    ]
-  }
+      { path: 'logs', component: Logs },
+    ],
+  },
 ]
 
 const router = createRouter({
   history: createWebHashHistory(),
-  routes
+  routes,
 })
 
 router.beforeEach((to, from, next) => {
@@ -58,4 +58,3 @@ router.beforeEach((to, from, next) => {
 })
 
 export default router
-
