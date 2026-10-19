@@ -42,6 +42,163 @@ from sqlalchemy import create_engine, text
 
 
 class WorkflowTests(unittest.TestCase):
+    def configure_global_reader(self):
+        with SessionLocal() as db:
+            user = db.get(User, 3)
+            user.data_scope = "all_read_dept_write"
+            user.permissions = json.dumps(
+                [
+                    "assets",
+                    "assets_write",
+                    "reports",
+                    "import",
+                    "export",
+                    "transfer",
+                    "approval",
+                    "scrap",
+                ]
+            )
+            db.commit()
+
+    def test_global_reader_sees_all_but_edits_only_original_department(self):
+        self.configure_global_reader()
+        own = self.asset(department_id=1, number="OWN-READ")
+        other = self.asset(department_id=2, number="OTHER-READ")
+        headers = self.headers(3)
+        rows = self.client.get("/api/assets/it", headers=headers)
+        self.assertEqual(rows.status_code, 200)
+        self.assertEqual({row["id"] for row in rows.json()}, {own, other})
+        for payload in [{"name": "禁止编辑"}, {"name": "禁止改归属", "department": "甲部门"}]:
+            result = self.client.put(f"/api/assets/it/{other}", headers=headers, json=payload)
+            self.assertEqual(result.status_code, 403, result.text)
+        self.assertEqual(
+            self.client.put(
+                f"/api/assets/it/{own}", headers=headers, json={"name": "本部门修改"}
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.put(
+                f"/api/assets/it/{own}",
+                headers=headers,
+                json={"name": "本部门修改", "department": "乙部门"},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/assets/it",
+                headers=headers,
+                json={"name": "外部门新增", "department": "乙部门"},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/assets/it",
+                headers=headers,
+                json={"name": "本部门新增", "department": "甲部门"},
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/scrap",
+                headers=headers,
+                json={"asset_type": "it", "asset_id": other, "asset_desc": "外部门"},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/delete-request",
+                headers=headers,
+                json={
+                    "table_name": "it_assets",
+                    "record_id": other,
+                    "record_desc": "外部门",
+                    "reason": "不允许",
+                },
+            ).status_code,
+            403,
+        )
+        with SessionLocal() as db:
+            self.assertEqual(db.get(ITAsset, other).department_id, 2)
+            self.assertNotEqual(db.get(ITAsset, other).name, "禁止编辑")
+
+    def test_global_reader_boundary_applies_to_all_asset_types_and_import(self):
+        from models import PhoneAsset, PhoneNumber
+
+        self.configure_global_reader()
+        with SessionLocal() as db:
+            db.add_all(
+                [
+                    PhoneAsset(
+                        id=1,
+                        asset_number="P-FOREIGN",
+                        brand_model="其他手机",
+                        department="乙部门",
+                        department_id=2,
+                    ),
+                    MedicalAsset(
+                        id=1,
+                        asset_number="M-FOREIGN",
+                        name="其他医疗",
+                        department="乙部门",
+                        department_id=2,
+                    ),
+                    PhoneNumber(id=1, number="13800000001", department="乙部门", department_id=2),
+                ]
+            )
+            db.commit()
+        headers = self.headers(3)
+        for kind, payload in [
+            ("phone", {"brand_model": "禁止", "department": "甲部门"}),
+            ("medical", {"name": "禁止", "department": "甲部门"}),
+            ("numbers", {"number": "13800000001", "department": "甲部门"}),
+        ]:
+            self.assertEqual(len(self.client.get(f"/api/assets/{kind}", headers=headers).json()), 1)
+            self.assertEqual(
+                self.client.put(f"/api/assets/{kind}/1", headers=headers, json=payload).status_code,
+                403,
+            )
+        wb = openpyxl.Workbook()
+        wb.active.append(["设备名称", "部门"])
+        wb.active.append(["允许导入", "甲部门"])
+        wb.active.append(["禁止导入", "乙部门"])
+        data = BytesIO()
+        wb.save(data)
+        wb.close()
+        result = self.client.post(
+            "/api/ie/it/import", headers=headers, files={"file": ("scope.xlsx", data.getvalue())}
+        )
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual((result.json()["imported"], result.json()["skipped"]), (1, 1))
+
+    def test_global_read_department_write_configuration_requires_department(self):
+        payload = {
+            "username": "global-reader",
+            "name": "跨部门查看",
+            "password": "testing-password-123",
+            "role": "普通用户",
+            "data_scope": "all_read_dept_write",
+            "permissions": ["assets", "assets_write"],
+            "department": "甲部门",
+        }
+        result = self.client.post("/api/auth/users", headers=self.headers(1), json=payload)
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(result.json()["data_scope"], "all_read_dept_write")
+        payload.update(username="invalid-reader", department=None)
+        self.assertEqual(
+            self.client.post("/api/auth/users", headers=self.headers(1), json=payload).status_code,
+            400,
+        )
+        payload.update(department="甲部门", permissions=["departments"])
+        self.assertEqual(
+            self.client.post("/api/auth/users", headers=self.headers(1), json=payload).status_code,
+            400,
+        )
+
     def test_disabled_during_password_check_cannot_receive_token(self):
         entered, release = Event(), Event()
 

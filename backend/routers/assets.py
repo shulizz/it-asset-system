@@ -41,6 +41,8 @@ def sync_department_id(db, item):
 
 def update_asset_fields(db, item, data, user, user_field):
     """Merge submitted fields; only an explicit null clears an optional value."""
+    # Authorize the original owner before accepting a new department in the payload.
+    check_scope(item, user)
     values = data.model_dump(exclude_unset=True)
     identity = "asset_number" if hasattr(item, "asset_number") else "number"
     if identity in values:

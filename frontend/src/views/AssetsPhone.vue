@@ -50,7 +50,7 @@
               <button
                 type="button"
                 class="row-action"
-                v-if="canWriteAssets"
+                v-if="canEditAsset(item)"
                 @click="edit(item)"
                 style="color: #2563eb; cursor: pointer; margin-right: 10px"
               >
@@ -58,7 +58,7 @@
               ><button
                 type="button"
                 class="delete-action"
-                v-if="canWriteAssets"
+                v-if="canEditAsset(item)"
                 @click="askDelete(item)"
                 style="color: #ef4444; cursor: pointer"
               >
@@ -80,8 +80,10 @@
         <div class="form-row">
           <label>部门</label>
           <select v-model="form.department">
-            <option value="">-- 请选择 --</option>
-            <option v-for="d in deptList" :value="d.name">{{ d.name }}</option>
+            <option v-if="canWriteAllDepartments" value="">-- 请选择 --</option>
+            <option v-for="d in deptList.filter(canUseDepartment)" :value="d.name">
+              {{ d.name }}
+            </option>
           </select>
         </div>
         <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px">
@@ -97,7 +99,13 @@
 import PageHeading from '../components/PageHeading.vue'
 import TableFrame from '../components/TableFrame.vue'
 import { usePermissions } from '../usePermissions'
-const { canWriteAssets } = usePermissions()
+const {
+  canWriteAssets,
+  canEditAsset,
+  canUseDepartment,
+  canWriteAllDepartments,
+  defaultAssetDepartment,
+} = usePermissions()
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import DeleteRequestDialog from '../components/DeleteRequestDialog.vue'
@@ -126,7 +134,7 @@ const form = ref({
   imei: '',
   bound_number: '',
   user_name: '',
-  department: '',
+  department: defaultAssetDepartment(),
 })
 async function load() {
   const res = await api.get('/assets/phone')
@@ -147,7 +155,13 @@ async function save() {
   if (form.value.id) await api.put(`/assets/phone/${form.value.id}`, form.value)
   else await api.post('/assets/phone', form.value)
   showForm.value = false
-  form.value = { id: null, asset_number: '', brand_model: '', user_name: '', department: '' }
+  form.value = {
+    id: null,
+    asset_number: '',
+    brand_model: '',
+    user_name: '',
+    department: defaultAssetDepartment(),
+  }
   load()
 }
 function statusClass(s) {
@@ -163,7 +177,13 @@ onMounted(async () => {
 })
 
 function openCreateForm() {
-  form.value = { id: null, asset_number: '', brand_model: '', user_name: '', department: '' }
+  form.value = {
+    id: null,
+    asset_number: '',
+    brand_model: '',
+    user_name: '',
+    department: defaultAssetDepartment(),
+  }
   showForm.value = true
 }
 </script>

@@ -32,7 +32,13 @@
             </td>
             <td>{{ u.department || '—' }}</td>
             <td>
-              {{ u.role === 'super_admin' || u.data_scope === 'all' ? '全部部门' : '仅本部门' }}
+              {{
+                u.role === 'super_admin' || u.data_scope === 'all'
+                  ? '全部部门（可编辑）'
+                  : u.data_scope === 'all_read_dept_write'
+                    ? '查看全部，编辑本部门'
+                    : '仅本部门'
+              }}
             </td>
             <td>
               {{
@@ -168,6 +174,7 @@
           <select v-model="form.data_scope" :disabled="form.account_type === 'super_admin'">
             <option value="department">仅本部门</option>
             <option value="all">全部部门</option>
+            <option value="all_read_dept_write">查看全部，编辑本部门</option>
           </select>
         </div>
         <p style="font-size: 12px; color: #64748b">

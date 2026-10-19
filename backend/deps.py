@@ -86,7 +86,7 @@ def require_super_admin(user: User = Depends(get_current_user)):
 def scope_query(query, model, user):
     if hasattr(model, "asset_number") or getattr(model, "__tablename__", "") == "phone_numbers":
         query = query.filter(model.status != "archived")
-    if user.role == "super_admin" or user.data_scope == "all":
+    if user.role == "super_admin" or user.data_scope in ("all", "all_read_dept_write"):
         return query
     if not user.department_id:
         return query.filter(False)

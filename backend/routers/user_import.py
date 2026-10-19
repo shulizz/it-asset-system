@@ -41,7 +41,7 @@ def template(current_user=Depends(require_super_admin)):
         ws.column_dimensions[column].width = width
         for row in range(2, 102):
             ws[f"{column}{row}"].number_format = "@"
-    scope = DataValidation(type="list", formula1='"仅本部门,全部部门"')
+    scope = DataValidation(type="list", formula1='"仅本部门,全部部门,查看全部，编辑本部门"')
     ws.add_data_validation(scope)
     scope.add("G2:G101")
     notes = wb.create_sheet("填写说明")
@@ -53,7 +53,10 @@ def template(current_user=Depends(require_super_admin)):
         ("邮箱", "可选，有效邮箱地址，可用于接收提醒"),
         ("角色名称", "可选，仅显示名称，不自动授予权限；超级管理员请在页面手动创建"),
         ("部门", "填写系统中已存在的部门名称，不会自动创建部门"),
-        ("数据范围", "仅本部门：必须填写部门；全部部门：可不填部门。空白按仅本部门处理"),
+        (
+            "数据范围",
+            "仅本部门、查看全部，编辑本部门：必须填写部门；全部部门：可不填部门。空白按仅本部门处理",
+        ),
         ("权限", "可选，中文权限名称或英文标识，多项用顿号、逗号或换行分隔；留空表示无操作权限"),
         (
             "导入规则",
@@ -145,11 +148,13 @@ def import_users(
                 "": "department",
                 "仅本部门": "department",
                 "全部部门": "all",
+                "查看全部，编辑本部门": "all_read_dept_write",
                 "department": "department",
                 "all": "all",
+                "all_read_dept_write": "all_read_dept_write",
             }.get(value("数据范围"))
             if scope is None:
-                raise ValueError("数据范围须填写仅本部门或全部部门")
+                raise ValueError("数据范围须填写仅本部门、全部部门或查看全部，编辑本部门")
             # Passwords are kept exactly as entered, without trimming or logging.
             password = str(values["初始密码"]) if values.get("初始密码") is not None else ""
             data = UserIn(

@@ -104,7 +104,7 @@ def validate_access(data):
     allowed = {key for key, label in ALL_PERMISSIONS}
     if data.permissions is not None and set(data.permissions) - allowed:
         raise HTTPException(400, "包含未知或保留的权限")
-    if data.data_scope == "department" and not data.department and data.role != "super_admin":
+    if data.data_scope != "all" and not data.department and data.role != "super_admin":
         raise HTTPException(400, "仅本部门范围必须选择所属部门")
     if (
         data.role != "super_admin"
@@ -126,7 +126,7 @@ class UserIn(BaseModel):
     role: str = ""
     department: Optional[str] = None
     permissions: Optional[list[str]] = None
-    data_scope: Literal["all", "department"] = "department"
+    data_scope: Literal["all", "department", "all_read_dept_write"] = "department"
 
     @field_validator("username", "name")
     @classmethod

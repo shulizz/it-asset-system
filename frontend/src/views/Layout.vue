@@ -171,9 +171,11 @@ const pageNames = {
 }
 const pageTitle = computed(() => pageNames[route.path.split('/')[1]] || '工作台')
 const scopeText = computed(() =>
-  user.value.role === 'super_admin' || user.value.data_scope === 'all'
-    ? '全部部门'
-    : user.value.department || '当前权限范围',
+  user.value.data_scope === 'all_read_dept_write'
+    ? '查看全部 · 编辑本部门'
+    : user.value.role === 'super_admin' || user.value.data_scope === 'all'
+      ? '全部部门'
+      : user.value.department || '当前权限范围',
 )
 
 let refreshTimer
