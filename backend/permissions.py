@@ -6,8 +6,11 @@ ALL_PERMISSIONS = [
     ("import", "导入数据"),
     ("export", "导出数据"),
     ("wechat", "管理微信账号（全部部门范围）"),
+    ("wechat_read", "查看微信账号（全部账号）"),
+    ("wechat_edit", "新增和编辑微信账号资料（全部账号）"),
     ("wechat_secret", "查看和修改微信密码"),
     ("apply", "提交设备申请"),
+    ("scrap_apply", "提交报废申请"),
     ("transfer", "设备流转"),
     ("scrap", "报废管理"),
     ("approval", "审批中心"),
@@ -19,7 +22,7 @@ ALL_PERMISSIONS = [
 ]
 PERMISSION_KEYS = {key for key, _ in ALL_PERMISSIONS}
 GLOBAL_PERMISSIONS = {"departments", "logs", "wechat"}
-PERMISSION_DEPENDENCIES = {"wechat_secret": {"wechat"}}
+PERMISSION_DEPENDENCIES = {"wechat_secret": {"wechat"}, "wechat_edit": {"wechat_read"}}
 
 
 def module_permission(module):

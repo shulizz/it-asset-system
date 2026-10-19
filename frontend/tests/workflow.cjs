@@ -25,6 +25,10 @@ function component(file, context, bindings) {
   }
   context.hasMedicalAccess ||= () => true
   vm.createContext(context)
+  vm.runInContext(
+    fs.readFileSync(path.join(root, 'wechatAccess.js'), 'utf8').replace(/^export /gm, ''),
+    context,
+  )
   vm.runInContext(code + `\nglobalThis.state = {${bindings.join(',')}}`, context)
   return { state: context.state, mounted, context }
 }

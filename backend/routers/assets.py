@@ -91,6 +91,7 @@ def list_it(
             "apply",
             "transfer",
             "scrap",
+            "scrap_apply",
             "approval",
         )
     ),
@@ -181,6 +182,7 @@ def list_phone(
             "apply",
             "transfer",
             "scrap",
+            "scrap_apply",
             "approval",
         )
     ),
@@ -282,6 +284,7 @@ def list_medical(
             "apply",
             "transfer",
             "scrap",
+            "scrap_apply",
             "approval",
         )
     ),
@@ -389,6 +392,7 @@ def list_numbers(
             "apply",
             "transfer",
             "scrap",
+            "scrap_apply",
             "approval",
         )
     ),

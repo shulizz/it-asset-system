@@ -21,7 +21,9 @@ def export_report(db: Session = Depends(get_db), user=Depends(require_perm("repo
         if can_view_medical(user):
             modules.append("medical")
         modules.append("number")
-        if "wechat" in permissions and (user.role == "super_admin" or user.data_scope == "all"):
+        if "wechat_read" in permissions or (
+            "wechat" in permissions and (user.role == "super_admin" or user.data_scope == "all")
+        ):
             modules.append("wechat")
         distribution = {}
         for module in modules:

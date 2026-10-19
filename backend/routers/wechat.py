@@ -1,17 +1,29 @@
 from typing import Optional
 
 from credential_crypto import decrypt_credential, encrypt_credential
-from database import get_db
+from database import get_db, get_write_db
 from deps import get_current_user, get_user_permissions, require_perm
 from fastapi import APIRouter, Depends, HTTPException
 from models import OperationLog, User, WeChatAccount
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 
-def wechat_access(user=Depends(require_perm("wechat"))):
-    if user.role != "super_admin" and user.data_scope != "all":
-        raise HTTPException(403, "微信账号没有部门归属，需要全部部门数据范围")
+def legacy_wechat_access(user, db):
+    return "wechat" in get_user_permissions(user, db) and (
+        user.role == "super_admin" or user.data_scope == "all"
+    )
+
+
+def wechat_access(user=Depends(get_current_user), db=Depends(get_db)):
+    if not legacy_wechat_access(user, db) and "wechat_read" not in get_user_permissions(user, db):
+        raise HTTPException(403, "没有微信账号查看权限")
+    return user
+
+
+def wechat_edit_access(user=Depends(wechat_access), db=Depends(get_db)):
+    if not legacy_wechat_access(user, db) and "wechat_edit" not in get_user_permissions(user, db):
+        raise HTTPException(403, "没有微信账号编辑权限")
     return user
 
 
@@ -49,6 +61,14 @@ class WeChatIn(BaseModel):
     status: Optional[str] = "idle"
     notes: Optional[str] = None
 
+    @field_validator("wx_account")
+    @classmethod
+    def valid_account_name(cls, value):
+        value = value.strip()
+        if not value or len(value) > 100:
+            raise HTTPException(400, "微信账号不能为空，最多100个字符")
+        return value
+
 
 @router.get("")
 def list(db: Session = Depends(get_db), current_user=Depends(wechat_access)):
@@ -60,7 +80,9 @@ def list(db: Session = Depends(get_db), current_user=Depends(wechat_access)):
 
 @router.post("")
 def create(
-    data: WeChatIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+    data: WeChatIn,
+    db: Session = Depends(get_write_db),
+    current_user: User = Depends(wechat_edit_access),
 ):
     check_password_access(data, current_user, db)
     if db.query(WeChatAccount).filter(WeChatAccount.wx_account == data.wx_account).first():
@@ -87,15 +109,22 @@ def create(
 def update(
     item_id: int,
     data: WeChatIn,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_write_db),
+    current_user: User = Depends(wechat_edit_access),
 ):
     check_password_access(data, current_user, db)
     item = db.get(WeChatAccount, item_id)
     if not item:
         raise HTTPException(404, "不存在")
-    data.status = "in_use" if data.user_name else "idle"
-    for k, v in data.model_dump().items():
+    if (
+        db.query(WeChatAccount)
+        .filter(WeChatAccount.wx_account == data.wx_account, WeChatAccount.id != item_id)
+        .first()
+    ):
+        raise HTTPException(409, "微信账号已存在")
+    values = data.model_dump(exclude_unset=True)
+    values["status"] = "in_use" if values.get("user_name", item.user_name) else "idle"
+    for k, v in values.items():
         if k == "wx_password" and v is None:
             continue
         setattr(item, k, encrypt_credential(v) if k == "wx_password" and v is not None else v)
@@ -114,7 +143,9 @@ def update(
 
 @router.delete("/{item_id}")
 def delete(
-    item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+    item_id: int,
+    db: Session = Depends(get_write_db),
+    current_user: User = Depends(require_perm("wechat")),
 ):
     item = db.get(WeChatAccount, item_id)
     if not item:

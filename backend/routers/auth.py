@@ -200,7 +200,7 @@ def validate_access(data):
 
     for permission, dependencies in PERMISSION_DEPENDENCIES.items():
         if permission in (data.permissions or []) and not dependencies.issubset(data.permissions):
-            raise HTTPException(400, "微信密码权限必须同时配置微信管理权限")
+            raise HTTPException(400, "微信编辑需同时配置微信查看；微信密码需同时配置微信管理")
 
 
 class UserIn(BaseModel):

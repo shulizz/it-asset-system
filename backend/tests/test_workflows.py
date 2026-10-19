@@ -43,6 +43,280 @@ from sqlalchemy import create_engine, text
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_wechat_basic_edit_is_independent_of_asset_scope_and_secrets(self):
+        with SessionLocal() as db:
+            user = db.get(User, 3)
+            user.data_scope = "all_read_dept_write"
+            user.permissions = json.dumps(["wechat_read", "wechat_edit", "assets_write"])
+            db.add(
+                WeChatAccount(
+                    id=1,
+                    wx_account="basic-wechat",
+                    wx_password=encrypt_credential("private-fixture"),
+                    real_name="原实名",
+                    purpose="原用途",
+                )
+            )
+            db.commit()
+        foreign = self.asset(department_id=2, number="FOREIGN-WECHAT")
+        headers = self.headers(3)
+        result = self.client.get("/api/wechat", headers=headers)
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertIsNone(result.json()[0]["wx_password"])
+        updated = self.client.put(
+            "/api/wechat/1",
+            headers=headers,
+            json={"wx_account": "basic-wechat", "purpose": "新用途"},
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()["real_name"], "原实名")
+        self.assertIsNone(updated.json()["wx_password"])
+        self.assertEqual(
+            self.client.post(
+                "/api/wechat", headers=headers, json={"wx_account": "new-basic", "purpose": "新增"}
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.put(
+                "/api/wechat/1",
+                headers=headers,
+                json={"wx_account": "basic-wechat", "wx_password": "forbidden-secret"},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(self.client.delete("/api/wechat/1", headers=headers).status_code, 403)
+        self.assertEqual(
+            self.client.put(
+                f"/api/assets/it/{foreign}", headers=headers, json={"name": "禁止跨部门"}
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.put(
+                "/api/wechat/1", headers=headers, json={"wx_account": "new-basic"}
+            ).status_code,
+            409,
+        )
+        with SessionLocal() as db:
+            self.assertEqual(
+                decrypt_credential(db.get(WeChatAccount, 1).wx_password), "private-fixture"
+            )
+            self.assertEqual(db.get(User, 3).data_scope, "all_read_dept_write")
+
+    def test_wechat_read_only_does_not_allow_edit_and_requires_explicit_grants(self):
+        with SessionLocal() as db:
+            user = db.get(User, 2)
+            user.permissions = json.dumps(["wechat_read"])
+            db.add(
+                WeChatAccount(
+                    id=1,
+                    wx_account="readonly-wechat",
+                    wx_password=encrypt_credential("private-fixture"),
+                )
+            )
+            db.commit()
+        headers = self.headers(2)
+        self.assertEqual(self.client.get("/api/wechat", headers=headers).status_code, 200)
+        self.assertEqual(
+            self.client.post(
+                "/api/wechat", headers=headers, json={"wx_account": "denied"}
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.put(
+                "/api/wechat/1", headers=headers, json={"wx_account": "denied"}
+            ).status_code,
+            403,
+        )
+        self.assertEqual(self.client.delete("/api/wechat/1", headers=headers).status_code, 403)
+        self.assertEqual(self.client.get("/api/ie/wechat/export", headers=headers).status_code, 403)
+        payload = {
+            "username": "wechat-editor",
+            "name": "编辑",
+            "password": "testing-password-123",
+            "department": "甲部门",
+            "data_scope": "all_read_dept_write",
+            "permissions": ["wechat_read", "wechat_edit"],
+        }
+        self.assertEqual(
+            self.client.post("/api/auth/users", headers=self.headers(1), json=payload).status_code,
+            200,
+        )
+        payload.update(username="invalid-wechat-editor", permissions=["wechat_edit"])
+        self.assertEqual(
+            self.client.post("/api/auth/users", headers=self.headers(1), json=payload).status_code,
+            400,
+        )
+
+    def test_scrap_application_permission_does_not_grant_edit_approval_or_transfer(self):
+        from models import ScrapRequest
+
+        with SessionLocal() as db:
+            user = db.get(User, 2)
+            user.permissions = json.dumps(["scrap_apply"])
+            user.data_scope = "all_read_dept_write"
+            db.commit()
+        own = self.asset(number="SCRAP-ONLY")
+        other = self.asset(department_id=2, number="SCRAP-OTHER")
+        headers = self.headers(2)
+        self.assertEqual(self.client.get("/api/assets/it", headers=headers).status_code, 200)
+        request = self.client.post(
+            "/api/scrap",
+            headers=headers,
+            json={
+                "asset_type": "it",
+                "asset_id": own,
+                "asset_desc": "错误的客户端描述",
+                "applicant": "伪造申请人",
+                "status": "approved",
+                "auditor": "伪造审批人",
+            },
+        )
+        self.assertEqual(request.status_code, 200, request.text)
+        self.assertEqual(request.json()["status"], "pending_approval")
+        self.assertEqual(request.json()["asset_desc"], "SCRAP-ONLY 测试设备")
+        self.assertEqual(request.json()["applicant_id"], 2)
+        self.assertIsNone(request.json()["auditor"])
+        request_id = request.json()["id"]
+        self.assertEqual(
+            self.client.put(f"/api/scrap/{request_id}/approve", headers=headers).status_code, 403
+        )
+        self.assertEqual(
+            self.client.put(
+                f"/api/assets/it/{own}", headers=headers, json={"name": "不允许编辑"}
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/transfer",
+                headers=headers,
+                json={
+                    "transfer_number": "forbidden",
+                    "type": "checkout",
+                    "asset_desc": "设备",
+                    "asset_type": "it",
+                    "asset_id": own,
+                    "new_user": "本人",
+                },
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/delete-request",
+                headers=headers,
+                json={
+                    "table_name": "apply_requests",
+                    "record_desc": "不能申请领用",
+                    "reason": "领用",
+                    "application_type": "checkout",
+                    "asset_type": "it",
+                    "asset_id": own,
+                    "target_user": "本人",
+                },
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/scrap",
+                headers=headers,
+                json={"asset_type": "it", "asset_id": other, "asset_desc": "外部门"},
+            ).status_code,
+            403,
+        )
+        with SessionLocal() as db:
+            self.assertEqual(db.get(ITAsset, own).status, "idle")
+            db.add(
+                ScrapRequest(
+                    request_number="OTHER-PERSON",
+                    asset_desc="他人申请",
+                    applicant_id=3,
+                    asset_type="it",
+                    department_id=1,
+                )
+            )
+            db.commit()
+        rows = self.client.get("/api/scrap", headers=headers)
+        self.assertEqual([r["id"] for r in rows.json()], [request_id])
+        approved = self.client.put(f"/api/scrap/{request_id}/approve", headers=self.headers(3))
+        self.assertEqual(approved.status_code, 200, approved.text)
+
+    def test_scrap_application_permission_keeps_medical_and_department_guards(self):
+        with SessionLocal() as db:
+            db.get(User, 2).permissions = json.dumps(["scrap_apply"])
+            db.add(
+                MedicalAsset(
+                    id=1,
+                    asset_number="MED-SCRAP",
+                    name="医疗设备",
+                    department="甲部门",
+                    department_id=1,
+                    status="idle",
+                )
+            )
+            db.commit()
+        payload = {"asset_type": "medical", "asset_id": 1, "asset_desc": "医疗设备"}
+        self.assertEqual(
+            self.client.get("/api/assets/medical", headers=self.headers(2)).status_code, 403
+        )
+        self.assertEqual(
+            self.client.post("/api/scrap", headers=self.headers(2), json=payload).status_code, 403
+        )
+        self.use_medical_departments()
+        self.assertEqual(
+            self.client.get("/api/assets/medical", headers=self.headers(2)).status_code, 200
+        )
+        self.assertEqual(
+            self.client.post("/api/scrap", headers=self.headers(2), json=payload).status_code, 200
+        )
+
+    def test_scrap_application_permission_is_configurable_and_importable(self):
+        result = self.client.get("/api/auth/permissions", headers=self.headers(1))
+        self.assertIn({"key": "scrap_apply", "label": "提交报废申请"}, result.json())
+        payload = {
+            "username": "scrap-only",
+            "name": "申请人",
+            "password": "testing-password-123",
+            "role": "普通用户",
+            "department": "甲部门",
+            "data_scope": "all_read_dept_write",
+            "permissions": ["scrap_apply"],
+        }
+        result = self.client.post("/api/auth/users", headers=self.headers(1), json=payload)
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(result.json()["permissions"], ["scrap_apply"])
+        content = self.user_workbook(
+            [
+                [
+                    "import-scrap",
+                    "申请人2",
+                    "testing-password-123",
+                    "",
+                    "普通用户",
+                    "甲部门",
+                    "仅本部门",
+                    "提交报废申请",
+                ]
+            ]
+        )
+        result = self.client.post(
+            "/api/user-import/import",
+            headers=self.headers(1),
+            files={"file": ("users.xlsx", content)},
+        )
+        self.assertEqual(result.status_code, 200, result.text)
+        with SessionLocal() as db:
+            self.assertEqual(
+                json.loads(
+                    db.query(User).filter(User.username == "import-scrap").one().permissions
+                ),
+                ["scrap_apply"],
+            )
+
     def test_self_password_requires_current_password_and_authenticated_identity(self):
         headers = self.headers(2)
         with SessionLocal() as db:

@@ -55,7 +55,7 @@ def list_scraps(db: Session = Depends(get_db), current_user: User = Depends(get_
 def create_scrap(
     data: ScrapIn,
     db: Session = Depends(get_write_db),
-    current_user: User = Depends(require_any("scrap", "apply")),
+    current_user: User = Depends(require_any("scrap_apply", "scrap", "apply")),
 ):
     model = ASSET_MAP.get(data.asset_type)
     if not model or not data.asset_id:
@@ -68,6 +68,11 @@ def create_scrap(
     data.submit_date = date.today()
     data.applicant = current_user.name
     data.department = asset.department
+    # The application and printed form must describe the asset actually selected.
+    data.asset_desc = (
+        f"{getattr(asset, 'asset_number', getattr(asset, 'number', ''))} "
+        f"{getattr(asset, 'name', getattr(asset, 'brand_model', ''))}"
+    ).strip()
     data.status = "pending_approval"
     data.auditor = None
     data.request_number = "SC-" + uuid4().hex

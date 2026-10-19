@@ -48,7 +48,10 @@ const canUseModule = computed(
       currentUser.value.data_scope === 'all'),
 )
 const canExport = computed(
-  () => canUseModule.value && currentUser.value.permissions?.includes('export'),
+  () =>
+    (canUseModule.value ||
+      (props.module === 'wechat' && currentUser.value.permissions?.includes('wechat_read'))) &&
+    currentUser.value.permissions?.includes('export'),
 )
 const canImport = computed(
   () =>

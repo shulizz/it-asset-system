@@ -139,6 +139,14 @@ def _get_module(name: str):
 def _authorize_module(module: str, user: User, db: Session, action="export"):
     if module == "medical":
         require_medical_view(user)
+    if (
+        module == "wechat"
+        and action == "export"
+        and "wechat_read" in get_user_permissions(user, db)
+    ):
+        if "export" not in get_user_permissions(user, db):
+            raise HTTPException(403, "没有导出权限")
+        return
     required = module_permission(module)
     if (
         module in ("department", "wechat")

@@ -16,6 +16,9 @@ export function usePermissions() {
   }
   function canEditAsset(item) {
     if (!canWriteAssets.value) return false
+    return canOperateAsset(item)
+  }
+  function canOperateAsset(item) {
     if (canWriteAllDepartments.value) return true
     const user = currentUser.value
     return (
@@ -36,6 +39,7 @@ export function usePermissions() {
   return {
     canWriteAssets,
     canEditAsset,
+    canOperateAsset,
     canUseDepartment,
     canWriteAllDepartments,
     defaultAssetDepartment,

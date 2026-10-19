@@ -40,21 +40,25 @@
             ><AppIcon name="number" />电话号码</router-link
           >
         </template>
-        <router-link
-          v-if="
-            perms.includes('wechat') && (user.role === 'super_admin' || user.data_scope === 'all')
-          "
-          to="/wechat"
-          class="nav-item"
+        <router-link v-if="hasWeChatRead(user)" to="/wechat" class="nav-item"
           ><AppIcon name="wechat" />微信账号</router-link
         >
-        <template v-if="perms.includes('transfer') || perms.includes('scrap')">
+        <template
+          v-if="
+            perms.includes('transfer') || perms.includes('scrap') || perms.includes('scrap_apply')
+          "
+        >
           <div class="nav-group-title">流转与处置</div>
           <router-link v-if="perms.includes('transfer')" to="/transfer" class="nav-item"
             ><AppIcon name="transfer" />设备流转</router-link
           >
-          <router-link v-if="perms.includes('scrap')" to="/scrap" class="nav-item"
-            ><AppIcon name="scrap" />报废管理</router-link
+          <router-link
+            v-if="perms.includes('scrap') || perms.includes('scrap_apply')"
+            to="/scrap"
+            class="nav-item"
+            ><AppIcon name="scrap" />{{
+              perms.includes('scrap') ? '报废管理' : '报废申请'
+            }}</router-link
           >
         </template>
         <div
@@ -149,6 +153,7 @@
 
 <script setup>
 import { hasMedicalAccess } from '../medicalAccess'
+import { hasWeChatRead } from '../wechatAccess'
 const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
 import AppIcon from '../components/AppIcon.vue'
 import { computed, onMounted, ref, onUnmounted } from 'vue'

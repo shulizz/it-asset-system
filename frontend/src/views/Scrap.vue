@@ -1,9 +1,11 @@
 <template>
   <div>
-    <PageHeading title="报废管理" description="提交报废申请，查看审核进度与处理结果。"
+    <PageHeading
+      :title="canManageScrap ? '报废管理' : '报废申请'"
+      description="提交报废申请，查看审核进度与处理结果。"
       ><div class="scrap-heading-actions">
         <button class="btn-outline" @click="openPrint(null)">打印空白报废单</button
-        ><button class="btn-primary" @click="showForm = true">+ 发起报废申请</button>
+        ><button v-if="canSubmitScrap" class="btn-primary" @click="openForm">+ 发起报废申请</button>
       </div></PageHeading
     >
     <TableFrame title="报废申请" :count="list.length"
@@ -40,7 +42,7 @@
               <button
                 type="button"
                 class="delete-action"
-                v-if="canWriteAssets"
+                v-if="canEditAsset(item)"
                 @click="askDelete(item)"
                 style="color: #ef4444; cursor: pointer"
               >
@@ -73,19 +75,19 @@
             </option>
           </select>
         </div>
-        <div class="form-row"><label>申请人</label><input v-model="form.applicant" /></div>
+        <div class="form-row"><label>申请人</label><input v-model="form.applicant" readonly /></div>
         <div class="form-row">
           <label>部门</label>
-          <select v-model="form.department">
-            <option value="">-- 请选择 --</option>
-            <option v-for="d in deptList" :value="d.name">{{ d.name }}</option>
-          </select>
+          <input v-model="form.department" readonly />
         </div>
         <div class="form-row"><label>报废原因</label><input v-model="form.reason" /></div>
         <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px">
           <button class="btn-outline" @click="showForm = false">取消</button>
-          <button class="btn-primary" @click="save">提交</button>
+          <button class="btn-primary" :disabled="submitting" @click="save">
+            {{ submitting ? '正在提交…' : '提交' }}
+          </button>
         </div>
+        <p v-if="formError" class="scrap-error" role="alert">{{ formError }}</p>
       </div>
     </div>
     <DeleteRequestDialog :target="deleteTarget" @close="deleteTarget = null" />
@@ -103,6 +105,8 @@ import { ref, onMounted, computed } from 'vue'
 import api from '../api'
 import { currentUser } from '../userState'
 import DeleteRequestDialog from '../components/DeleteRequestDialog.vue'
+import { usePermissions } from '../usePermissions'
+const { canEditAsset, canOperateAsset } = usePermissions()
 const deleteTarget = ref(null)
 const showPrint = ref(false),
   printRecord = ref(null)
@@ -110,13 +114,32 @@ function openPrint(item) {
   printRecord.value = item
   showPrint.value = true
 }
-const canWriteAssets = computed(() =>
-  (currentUser.value.permissions || []).includes('assets_write'),
+const canManageScrap = computed(
+  () =>
+    currentUser.value.role === 'super_admin' ||
+    (currentUser.value.permissions || []).includes('scrap'),
+)
+const canSubmitScrap = computed(() =>
+  ['scrap_apply', 'scrap', 'apply'].some((p) => (currentUser.value.permissions || []).includes(p)),
 )
 const list = ref([]),
   showForm = ref(false)
-const deptList = ref([]),
-  assetOptions = ref([])
+const assetOptions = ref([]),
+  formError = ref(''),
+  submitting = ref(false)
+function openForm() {
+  formError.value = ''
+  form.value = {
+    assetType: '',
+    assetId: null,
+    asset_desc: '',
+    applicant: currentUser.value.name || '',
+    department: '',
+    reason: '',
+  }
+  assetOptions.value = []
+  showForm.value = true
+}
 const form = ref({
   assetType: '',
   assetId: null,
@@ -130,16 +153,32 @@ async function load() {
   list.value = res.data
 }
 async function onTypeChange() {
+  form.value.assetId = null
+  form.value.asset_desc = ''
+  form.value.department = ''
+  formError.value = ''
   assetOptions.value = []
-  if (!form.value.assetType) return
+  const type = form.value.assetType
+  if (!type) return
   const map = {
     it: '/assets/it',
     phone: '/assets/phone',
     medical: '/assets/medical',
     number: '/assets/numbers',
   }
-  const res = await api.get(map[form.value.assetType])
-  assetOptions.value = res.data
+  try {
+    const res = await api.get(map[type])
+    if (form.value.assetType === type)
+      assetOptions.value = res.data.filter(
+        (a) => canOperateAsset(a) && ['idle', 'in_use'].includes(a.status),
+      )
+  } catch (e) {
+    if (form.value.assetType === type)
+      formError.value =
+        typeof e.response?.data?.detail === 'string'
+          ? e.response.data.detail
+          : '设备列表加载失败，请重新选择设备类型'
+  }
 }
 function onAssetSelect() {
   const a = assetOptions.value.find((x) => x.id === form.value.assetId)
@@ -149,29 +188,42 @@ function onAssetSelect() {
   }
 }
 async function save() {
-  if (!form.value.assetId) {
-    alert('请选择设备')
+  if (submitting.value) return
+  formError.value = ''
+  const asset = assetOptions.value.find((a) => a.id === form.value.assetId)
+  if (!asset || !canOperateAsset(asset)) {
+    formError.value = '请选择有效的本部门设备'
     return
   }
-  await api.post('/scrap', {
-    request_number: 'SC-' + Date.now(),
-    asset_desc: form.value.asset_desc,
-    asset_type: form.value.assetType,
-    asset_id: form.value.assetId,
-    applicant: form.value.applicant,
-    department: form.value.department,
-    reason: form.value.reason,
-  })
-  showForm.value = false
-  form.value = {
-    assetType: '',
-    assetId: null,
-    asset_desc: '',
-    applicant: '',
-    department: '',
-    reason: '',
+  submitting.value = true
+  try {
+    await api.post('/scrap', {
+      request_number: 'SC-' + Date.now(),
+      asset_desc: form.value.asset_desc,
+      asset_type: form.value.assetType,
+      asset_id: form.value.assetId,
+      applicant: form.value.applicant,
+      department: form.value.department,
+      reason: form.value.reason,
+    })
+    showForm.value = false
+    form.value = {
+      assetType: '',
+      assetId: null,
+      asset_desc: '',
+      applicant: '',
+      department: '',
+      reason: '',
+    }
+    load()
+  } catch (e) {
+    formError.value =
+      typeof e.response?.data?.detail === 'string'
+        ? e.response.data.detail
+        : '报废申请提交失败，请稍后重试'
+  } finally {
+    submitting.value = false
   }
-  load()
 }
 function askDelete(item) {
   deleteTarget.value = {
@@ -197,13 +249,13 @@ function statusClass(s) {
 function statusText(s) {
   return scrapStatusText(s)
 }
-onMounted(async () => {
-  load()
-  const res = await api.get('/departments')
-  deptList.value = res.data
-})
+onMounted(load)
 </script>
 <style scoped>
+.scrap-error {
+  margin-top: 12px;
+  color: #b42318;
+}
 .print-record-action {
   margin-right: 10px;
 }

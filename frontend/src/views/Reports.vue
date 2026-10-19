@@ -96,6 +96,7 @@
 </template>
 <script setup>
 import { hasMedicalAccess } from '../medicalAccess'
+import { hasWeChatRead } from '../wechatAccess'
 const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
 import PageHeading from '../components/PageHeading.vue'
 import TableFrame from '../components/TableFrame.vue'
@@ -136,9 +137,7 @@ onMounted(async () => {
       return { data: [] }
     }
   }
-  const canWechat =
-    (currentUser.value.permissions || []).includes('wechat') &&
-    (currentUser.value.role === 'super_admin' || currentUser.value.data_scope === 'all')
+  const canWechat = hasWeChatRead(currentUser.value)
   const [it, phone, medical, numbers, depts, wc] = await Promise.all([
     fetchModule('/assets/it', 'IT设备'),
     fetchModule('/assets/phone', '手机'),
