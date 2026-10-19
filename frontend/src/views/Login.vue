@@ -13,6 +13,9 @@
       <div class="login-brand"><AppIcon name="asset" /></div>
       <h1>固定资产管理系统</h1>
       <p>登录账号，进入资产管理工作台</p>
+      <p v-if="route.query.passwordChanged === '1'" class="password-success" role="status">
+        密码已修改，请使用新密码重新登录。
+      </p>
       <div class="form-group">
         <label for="login-username">账号</label>
         <input
@@ -62,11 +65,12 @@
 <script setup>
 import AppIcon from '../components/AppIcon.vue'
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import api, { setServerURL, getServerURL } from '../api'
 import { setCurrentUser } from '../userState'
 
 const router = useRouter()
+const route = useRoute()
 const username = ref(localStorage.getItem('remember_username') || '')
 localStorage.removeItem('remember_password')
 const password = ref('')
@@ -105,6 +109,13 @@ async function login() {
 </script>
 
 <style scoped>
+.login-box .password-success {
+  color: #087f72;
+  background: #eaf6f2;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
 .login-wrap {
   min-height: 100dvh;
   background: #122d40;

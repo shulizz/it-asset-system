@@ -8,9 +8,10 @@ from fastapi import HTTPException
 
 
 class LoginLimiter:
-    def __init__(self):
+    def __init__(self, message="登录尝试过于频繁，请稍后重试"):
         self._attempts = OrderedDict()
         self._lock = Lock()
+        self.message = message
 
     def clear(self):
         with self._lock:
@@ -26,9 +27,7 @@ class LoginLimiter:
                 while attempts and attempts[0] <= now - 60:
                     attempts.popleft()
                 if len(attempts) >= limit:
-                    raise HTTPException(
-                        429, "登录尝试过于频繁，请稍后重试", headers={"Retry-After": "60"}
-                    )
+                    raise HTTPException(429, self.message, headers={"Retry-After": "60"})
             for key, _ in keys:
                 self._attempts[key].append(now)
             while len(self._attempts) > 4096:
@@ -36,3 +35,4 @@ class LoginLimiter:
 
 
 login_limiter = LoginLimiter()
+password_limiter = LoginLimiter("密码验证过于频繁，请一分钟后重试")

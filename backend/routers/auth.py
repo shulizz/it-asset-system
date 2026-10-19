@@ -8,7 +8,7 @@ from database import get_db, get_write_db
 from deps import ALGORITHM, SECRET_KEY, get_current_user, get_user_permissions, require_super_admin
 from fastapi import APIRouter, Depends, HTTPException, Request
 from jose import jwt
-from login_limits import login_limiter
+from login_limits import login_limiter, password_limiter
 from models import DeleteRequest, Department, OperationLog, ScrapRequest, TransferRecord, User
 from passlib.context import CryptContext
 from pydantic import BaseModel, field_validator
@@ -96,6 +96,91 @@ def user_view(user, db):
 @router.get("/me")
 def me(db: Session = Depends(get_db), user=Depends(get_current_user)):
     return user_view(user, db)
+
+
+class CurrentPasswordIn(BaseModel):
+    current_password: str
+
+    @field_validator("current_password")
+    @classmethod
+    def bounded_current_password(cls, value):
+        if not value or len(value.encode("utf-8")) > 72:
+            raise HTTPException(400, "请填写当前密码，最多72个UTF-8字节")
+        return value
+
+
+class ChangePasswordIn(CurrentPasswordIn):
+    new_password: str
+    confirm_password: str
+
+    @field_validator("new_password", "confirm_password")
+    @classmethod
+    def bounded_new_password(cls, value):
+        if len(value) < 10 or len(value.encode("utf-8")) > 72:
+            raise HTTPException(400, "新密码至少10个字符，最多72个UTF-8字节")
+        return value
+
+
+def verify_current_password(data, request, db, user):
+    snapshot = (user.id, user.password_hash, user.token_version)
+    username = user.username
+    db.rollback()  # Verification and hashing never occupy the SQLite write lock.
+    address = request.client.host if request.client else "unknown"
+    password_limiter.check(address, username)
+    if not pwd_context.verify(data.current_password, snapshot[1]):
+        raise HTTPException(400, "当前密码不正确")
+    return snapshot
+
+
+@router.post("/password/verify")
+def verify_password(
+    data: CurrentPasswordIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    verify_current_password(data, request, db, user)
+    return {"verified": True}
+
+
+@router.post("/password/change")
+def change_password(
+    data: ChangePasswordIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if data.new_password != data.confirm_password:
+        raise HTTPException(400, "两次填写的新密码不一致")
+    if data.new_password == data.current_password:
+        raise HTTPException(400, "新密码不能与当前密码相同")
+    snapshot = verify_current_password(data, request, db, user)
+    password_hash = pwd_context.hash(data.new_password)
+    db.execute(text("BEGIN IMMEDIATE"))
+    current = (
+        db.query(User)
+        .filter(
+            User.id == snapshot[0],
+            User.is_active == 1,
+            User.password_hash == snapshot[1],
+            User.token_version == snapshot[2],
+        )
+        .first()
+    )
+    if not current:
+        raise HTTPException(409, "账号状态或密码已改变，请重新登录后重试")
+    current.password_hash = password_hash
+    current.token_version = (current.token_version or 0) + 1
+    db.add(
+        OperationLog(
+            user=current.name,
+            module="权限管理",
+            action="修改本人密码",
+            detail=f"账号 {current.username} 修改本人密码",
+        )
+    )
+    db.commit()
+    return {"message": "密码已修改，请使用新密码重新登录"}
 
 
 def validate_access(data):

@@ -104,6 +104,9 @@
           class="nav-item"
           ><AppIcon name="logs" />操作日志</router-link
         >
+        <router-link to="/account-password" class="nav-item"
+          ><AppIcon name="shield" />修改密码</router-link
+        >
       </nav>
       <div class="sidebar-footer">
         <div class="user-info">
@@ -155,6 +158,7 @@ const mobileNavOpen = ref(false)
 const route = useRoute()
 const pageNames = {
   dashboard: '工作台',
+  'account-password': '修改密码',
   'assets-it': 'IT 设备档案',
   'assets-phone': '手机设备档案',
   'assets-medical': '医疗设备档案',

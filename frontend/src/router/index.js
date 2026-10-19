@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import { currentUser } from '../userState'
 import { hasMedicalAccess } from '../medicalAccess'
 import Login from '../views/Login.vue'
+import AccountPassword from '../views/AccountPassword.vue'
 import Layout from '../views/Layout.vue'
 import Dashboard from '../views/Dashboard.vue'
 import AssetsIT from '../views/AssetsIT.vue'
@@ -28,6 +29,7 @@ const routes = [
     redirect: '/dashboard',
     children: [
       { path: 'dashboard', component: Dashboard },
+      { path: 'account-password', component: AccountPassword },
       { path: 'assets-it', component: AssetsIT },
       { path: 'assets-phone', component: AssetsPhone },
       { path: 'assets-medical', component: AssetsMedical },

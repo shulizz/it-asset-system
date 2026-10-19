@@ -43,6 +43,181 @@ from sqlalchemy import create_engine, text
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_self_password_requires_current_password_and_authenticated_identity(self):
+        headers = self.headers(2)
+        with SessionLocal() as db:
+            before = (db.get(User, 2).password_hash, db.get(User, 2).token_version)
+        verify = self.client.post(
+            "/api/auth/password/verify", headers=headers, json={"current_password": "incorrect"}
+        )
+        self.assertEqual(verify.status_code, 400)
+        self.assertEqual(
+            self.client.post(
+                "/api/auth/password/change",
+                headers=headers,
+                json={
+                    "current_password": "incorrect",
+                    "new_password": "new-password-123",
+                    "confirm_password": "new-password-123",
+                },
+            ).status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/auth/password/verify", json={"current_password": "testing-password-123"}
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/auth/password/change",
+                json={
+                    "current_password": "testing-password-123",
+                    "new_password": "new-password-123",
+                    "confirm_password": "new-password-123",
+                },
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/auth/password/verify",
+                headers=headers,
+                json={"current_password": "testing-password-123"},
+            ).json(),
+            {"verified": True},
+        )
+        with SessionLocal() as db:
+            self.assertEqual((db.get(User, 2).password_hash, db.get(User, 2).token_version), before)
+
+    def test_self_password_change_invalidates_all_old_tokens_and_changes_only_actor(self):
+        with SessionLocal() as db:
+            user = db.get(User, 2)
+            user.permissions = "[]"
+            db.commit()
+            admin_hash = db.get(User, 1).password_hash
+            before = (user.department_id, user.role, user.permissions)
+        headers = self.headers(2)
+        result = self.client.post(
+            "/api/auth/password/change",
+            headers=headers,
+            json={
+                "current_password": "testing-password-123",
+                "new_password": "new-password-123",
+                "confirm_password": "new-password-123",
+                "user_id": 1,
+            },
+        )
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(self.client.get("/api/auth/me", headers=headers).status_code, 401)
+        self.assertEqual(
+            self.client.post(
+                "/api/auth/login",
+                json={"username": "applicant", "password": "testing-password-123"},
+            ).status_code,
+            401,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/auth/login", json={"username": "applicant", "password": "new-password-123"}
+            ).status_code,
+            200,
+        )
+        with SessionLocal() as db:
+            user = db.get(User, 2)
+            self.assertTrue(pwd_context.verify("new-password-123", user.password_hash))
+            self.assertEqual(db.get(User, 1).password_hash, admin_hash)
+            self.assertEqual((user.department_id, user.role, user.permissions), before)
+            log = db.query(OperationLog).filter(OperationLog.action == "修改本人密码").one()
+            self.assertNotIn("new-password-123", log.detail)
+            self.assertNotIn("testing-password-123", log.detail)
+
+    def test_self_password_validation_rejects_mismatch_reuse_and_bcrypt_truncation(self):
+        headers = self.headers(2)
+        for new, confirm in [
+            ("short", "short"),
+            ("new-password-123", "different-password"),
+            ("testing-password-123", "testing-password-123"),
+            ("长" * 25, "长" * 25),
+        ]:
+            with self.subTest(new_length=len(new)):
+                result = self.client.post(
+                    "/api/auth/password/change",
+                    headers=headers,
+                    json={
+                        "current_password": "testing-password-123",
+                        "new_password": new,
+                        "confirm_password": confirm,
+                    },
+                )
+                self.assertEqual(result.status_code, 400, result.text)
+                self.assertNotIn(new, result.text)
+
+    def test_self_password_verification_throttles_repeated_guesses(self):
+        headers = self.headers(2)
+        with patch("routers.auth.pwd_context.verify", return_value=False):
+            for _ in range(10):
+                self.assertEqual(
+                    self.client.post(
+                        "/api/auth/password/verify",
+                        headers=headers,
+                        json={"current_password": "incorrect"},
+                    ).status_code,
+                    400,
+                )
+            result = self.client.post(
+                "/api/auth/password/change",
+                headers=headers,
+                json={
+                    "current_password": "incorrect",
+                    "new_password": "new-password-123",
+                    "confirm_password": "new-password-123",
+                },
+            )
+            self.assertEqual(result.status_code, 429)
+            self.assertEqual(result.headers["Retry-After"], "60")
+
+    def test_concurrent_admin_reset_is_not_overwritten_by_self_password_change(self):
+        entered, release = Event(), Event()
+        new_hash = pwd_context.hash("new-password-123")
+        reset_hash = pwd_context.hash("admin-reset-123")
+        headers = self.headers(2)
+
+        def slow_hash(*args):
+            entered.set()
+            if not release.wait(5):
+                raise RuntimeError("Hash wait timed out")
+            return new_hash
+
+        with (
+            patch("routers.auth.pwd_context.hash", side_effect=slow_hash),
+            ThreadPoolExecutor(max_workers=1) as pool,
+        ):
+            changing = pool.submit(
+                self.client.post,
+                "/api/auth/password/change",
+                headers=headers,
+                json={
+                    "current_password": "testing-password-123",
+                    "new_password": "new-password-123",
+                    "confirm_password": "new-password-123",
+                },
+            )
+            try:
+                self.assertTrue(entered.wait(3))
+                with SessionLocal() as db:
+                    db.execute(text("BEGIN IMMEDIATE"))
+                    user = db.get(User, 2)
+                    user.password_hash = reset_hash
+                    user.token_version += 1
+                    db.commit()
+            finally:
+                release.set()
+            self.assertEqual(changing.result().status_code, 409)
+        with SessionLocal() as db:
+            self.assertEqual(db.get(User, 2).password_hash, reset_hash)
+
     def use_medical_departments(self):
         with SessionLocal() as db:
             for department_id, name in [(1, "护理部"), (2, "医院")]:
@@ -1075,9 +1250,10 @@ class WorkflowTests(unittest.TestCase):
         cls.password_hash = pwd_context.hash("testing-password-123")
 
     def setUp(self):
-        from login_limits import login_limiter
+        from login_limits import login_limiter, password_limiter
 
         login_limiter.clear()
+        password_limiter.clear()
         with SessionLocal() as db:
             for table in reversed(Base.metadata.sorted_tables):
                 db.execute(table.delete())
