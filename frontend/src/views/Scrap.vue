@@ -60,7 +60,7 @@
             <option value="">-- 请选择 --</option>
             <option value="it">IT设备</option>
             <option value="phone">手机设备</option>
-            <option value="medical">医疗设备</option>
+            <option v-if="canViewMedical" value="medical">医疗设备</option>
             <option value="number">电话号码</option>
           </select>
         </div>
@@ -93,6 +93,8 @@
   </div>
 </template>
 <script setup>
+import { hasMedicalAccess } from '../medicalAccess'
+const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
 import PageHeading from '../components/PageHeading.vue'
 import TableFrame from '../components/TableFrame.vue'
 import ScrapPrintDialog from '../components/ScrapPrintDialog.vue'

@@ -7,6 +7,15 @@ const { parse } = require('vue/compiler-sfc')
 const root = path.join(__dirname, '..', 'src')
 
 async function main() {
+  const { hasMedicalAccess } = await import(
+    'data:text/javascript;base64,' +
+      Buffer.from(fs.readFileSync(path.join(root, 'medicalAccess.js'), 'utf8')).toString('base64')
+  )
+  assert.equal(hasMedicalAccess({ role: 'super_admin' }), true)
+  assert.equal(hasMedicalAccess({ role: '管理员', department: '商务通', department_id: 1 }), false)
+  assert.equal(hasMedicalAccess({ department: '护理部', department_id: 2 }), true)
+  assert.equal(hasMedicalAccess({ department: '医院', department_id: 3 }), true)
+  assert.equal(hasMedicalAccess({ department: '医院' }), false)
   const storage = new Map([['token', 'first-session']])
   const localStorage = {
     getItem: (key) => storage.get(key) || null,
@@ -30,10 +39,15 @@ async function main() {
     context,
   )
   const store = context.store
-  store.setCurrentUser({ permissions: ['assets', 'assets_write'], data_scope: 'all' })
+  store.setCurrentUser({
+    role: 'super_admin',
+    permissions: ['assets', 'assets_write'],
+    data_scope: 'all',
+  })
   const dashboard = {
     ...vue,
     ...store,
+    hasMedicalAccess,
     localStorage,
     onMounted: () => {},
     api: {},
@@ -55,7 +69,7 @@ async function main() {
   const a = store.refreshCurrentUser(),
     b = store.refreshCurrentUser()
   assert.equal(pending.length, 1, 'Concurrent consumers must share one request')
-  pending.shift()({ data: { permissions: ['assets'] } })
+  pending.shift()({ data: { role: 'super_admin', permissions: ['assets'] } })
   await Promise.all([a, b])
   assert.equal(dashboard.view.canSeeMedical.value, true)
   const stale = store.refreshCurrentUser()

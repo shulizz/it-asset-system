@@ -32,6 +32,7 @@ from models import (
     Department,
     ITAsset,
     MedicalAsset,
+    OperationLog,
     Role,
     TransferRecord,
     User,
@@ -42,6 +43,15 @@ from sqlalchemy import create_engine, text
 
 
 class WorkflowTests(unittest.TestCase):
+    def use_medical_departments(self):
+        with SessionLocal() as db:
+            for department_id, name in [(1, "护理部"), (2, "医院")]:
+                db.get(Department, department_id).name = name
+                db.query(User).filter(User.department_id == department_id).update(
+                    {User.department: name}
+                )
+            db.commit()
+
     def configure_global_reader(self):
         with SessionLocal() as db:
             user = db.get(User, 3)
@@ -59,6 +69,224 @@ class WorkflowTests(unittest.TestCase):
                 ]
             )
             db.commit()
+
+    def test_medical_visibility_cannot_be_granted_by_global_scope_or_role_label(self):
+        from models import PhoneAsset
+
+        self.configure_global_reader()
+        with SessionLocal() as db:
+            user = db.get(User, 3)
+            user.role = "管理员"
+            user.data_scope = "all"
+            user.permissions = json.dumps(
+                [
+                    "assets",
+                    "assets_write",
+                    "reports",
+                    "export",
+                    "import",
+                    "approval",
+                    "transfer",
+                    "scrap",
+                    "logs",
+                ]
+            )
+            db.add(
+                MedicalAsset(
+                    id=1,
+                    asset_number="SECRET-MED",
+                    name="受限医疗设备",
+                    department="甲部门",
+                    department_id=1,
+                    status="idle",
+                    expiry_date=date.today(),
+                )
+            )
+            db.add(
+                PhoneAsset(
+                    id=1,
+                    asset_number="PUBLIC-PHONE",
+                    brand_model="普通手机",
+                    department="甲部门",
+                    department_id=1,
+                    status="idle",
+                )
+            )
+            db.commit()
+        headers = self.headers(3)
+        for endpoint in [
+            "/api/assets/medical",
+            "/api/assets/medical/expiring",
+            "/api/assets/medical/notice-recipients",
+            "/api/ie/medical/export",
+            "/api/ie/medical/template",
+        ]:
+            result = self.client.get(endpoint, headers=headers)
+            self.assertEqual(result.status_code, 403, (endpoint, result.text))
+        self.assertEqual(
+            self.client.post(
+                "/api/assets/medical",
+                headers=headers,
+                json={"name": "禁止新增", "department": "甲部门"},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.put(
+                "/api/assets/medical/1", headers=headers, json={"name": "禁止修改"}
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/scrap",
+                headers=headers,
+                json={"asset_type": "medical", "asset_id": 1, "asset_desc": "不允许申请"},
+            ).status_code,
+            403,
+        )
+        result = self.client.get("/api/reports/export", headers=headers)
+        self.assertEqual(result.status_code, 200)
+        book = openpyxl.load_workbook(BytesIO(result.content), read_only=True)
+        self.assertNotIn("医疗设备", book.sheetnames)
+        self.assertNotIn("医疗设备", list(next(book["部门统计"].values)))
+        self.assertNotIn("SECRET-MED", str([list(sheet.values) for sheet in book]))
+        book.close()
+        self.assertEqual(self.client.get("/api/assets/phone", headers=headers).status_code, 200)
+
+    def test_medical_records_and_logs_are_hidden_from_non_medical_departments(self):
+        from models import ScrapRequest
+
+        self.configure_global_reader()
+        with SessionLocal() as db:
+            user = db.get(User, 3)
+            user.data_scope = "all"
+            user.permissions = json.dumps(["approval", "transfer", "scrap", "logs"])
+            db.add_all(
+                [
+                    ScrapRequest(
+                        id=1,
+                        request_number="MED-SCRAP",
+                        asset_desc="秘密医疗",
+                        asset_type="medical",
+                        department_id=1,
+                    ),
+                    ScrapRequest(
+                        id=2,
+                        request_number="IT-SCRAP",
+                        asset_desc="普通电脑",
+                        asset_type="it",
+                        department_id=1,
+                    ),
+                    TransferRecord(
+                        transfer_number="MED-FLOW",
+                        type="checkout",
+                        asset_desc="秘密医疗",
+                        asset_type="medical",
+                        department_id=1,
+                    ),
+                    DeleteRequest(
+                        id=1,
+                        table_name="medical_assets",
+                        record_id=1,
+                        record_desc="秘密医疗",
+                        reason="删除",
+                        department_id=1,
+                        applicant_id=2,
+                    ),
+                    DeleteRequest(
+                        id=2,
+                        table_name="apply_requests",
+                        record_id=0,
+                        asset_type="medical",
+                        asset_id=1,
+                        record_desc="秘密医疗申请",
+                        reason="报废",
+                        department_id=1,
+                        applicant_id=2,
+                    ),
+                    OperationLog(
+                        user="管理员", module="医疗设备", action="新增", detail="秘密医疗"
+                    ),
+                    OperationLog(
+                        user="管理员", module="设备流转", action="领用", detail="秘密医疗"
+                    ),
+                    OperationLog(user="管理员", module="IT设备", action="新增", detail="普通电脑"),
+                ]
+            )
+            db.commit()
+        headers = self.headers(3)
+        for endpoint in ["/api/scrap", "/api/transfer", "/api/delete-request", "/api/logs"]:
+            result = self.client.get(endpoint, headers=headers)
+            self.assertEqual(result.status_code, 200)
+            self.assertNotIn("秘密医疗", result.text)
+        self.assertEqual(len(self.client.get("/api/scrap", headers=headers).json()), 1)
+        self.assertEqual(
+            self.client.put("/api/delete-request/1/reject", headers=headers).status_code, 403
+        )
+        self.assertEqual(self.client.put("/api/scrap/1/reject", headers=headers).status_code, 403)
+
+    def test_hospital_and_nursing_can_view_medical_but_write_only_own_department(self):
+        self.use_medical_departments()
+        self.configure_global_reader()
+        with SessionLocal() as db:
+            db.add_all(
+                [
+                    MedicalAsset(
+                        id=1,
+                        asset_number="NURSING-MED",
+                        name="护理设备",
+                        department="护理部",
+                        department_id=1,
+                        status="idle",
+                    ),
+                    MedicalAsset(
+                        id=2,
+                        asset_number="HOSPITAL-MED",
+                        name="医院设备",
+                        department="医院",
+                        department_id=2,
+                        status="idle",
+                    ),
+                ]
+            )
+            db.get(User, 4).data_scope = "all_read_dept_write"
+            db.get(User, 4).permissions = json.dumps(["assets", "assets_write"])
+            db.commit()
+        for user_id, own, other in [(3, 1, 2), (4, 2, 1)]:
+            headers = self.headers(user_id)
+            result = self.client.get("/api/assets/medical", headers=headers)
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(len(result.json()), 2)
+            self.assertEqual(
+                self.client.put(
+                    f"/api/assets/medical/{own}", headers=headers, json={"name": "允许编辑"}
+                ).status_code,
+                200,
+            )
+            self.assertEqual(
+                self.client.put(
+                    f"/api/assets/medical/{other}", headers=headers, json={"name": "禁止编辑"}
+                ).status_code,
+                403,
+            )
+
+    def test_medical_emails_cannot_disclose_to_other_departments(self):
+        with SessionLocal() as db:
+            db.get(User, 2).email = "other@example.com"
+            db.commit()
+        recipients = self.client.get(
+            "/api/assets/medical/notice-recipients", headers=self.headers(1)
+        )
+        self.assertEqual(recipients.json()["users"], [])
+        with patch("notifier.send_expiry_notice") as send:
+            result = self.client.post(
+                "/api/assets/medical/send-expiry-email",
+                headers=self.headers(1),
+                json={"recipient_user_ids": [2]},
+            )
+            self.assertEqual(result.status_code, 403)
+            send.assert_not_called()
 
     def test_global_reader_sees_all_but_edits_only_original_department(self):
         self.configure_global_reader()
@@ -154,7 +382,6 @@ class WorkflowTests(unittest.TestCase):
         headers = self.headers(3)
         for kind, payload in [
             ("phone", {"brand_model": "禁止", "department": "甲部门"}),
-            ("medical", {"name": "禁止", "department": "甲部门"}),
             ("numbers", {"number": "13800000001", "department": "甲部门"}),
         ]:
             self.assertEqual(len(self.client.get(f"/api/assets/{kind}", headers=headers).json()), 1)
@@ -431,6 +658,7 @@ class WorkflowTests(unittest.TestCase):
             self.assertTrue(streams[1].closed)
 
     def test_slow_smtp_does_not_block_other_asset_writes(self):
+        self.use_medical_departments()
         entered, release = Event(), Event()
         with SessionLocal() as db:
             db.get(User, 2).email = "recipient@qq.com"
@@ -547,6 +775,7 @@ class WorkflowTests(unittest.TestCase):
         )
 
     def test_calibration_reminder_boundaries_scope_and_selected_mail(self):
+        self.use_medical_departments()
         today = date.today()
         with SessionLocal() as db:
             for i, (offset, status, department_id) in enumerate(
@@ -958,6 +1187,7 @@ class WorkflowTests(unittest.TestCase):
         )
 
     def test_expiry_recipient_permissions_and_selected_delivery(self):
+        self.use_medical_departments()
         with SessionLocal() as db:
             db.get(User, 2).email = "selected@qq.com"
             db.get(User, 4).email = "unselected@qq.com"

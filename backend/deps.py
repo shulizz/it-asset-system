@@ -83,7 +83,41 @@ def require_super_admin(user: User = Depends(get_current_user)):
     return user
 
 
+def can_view_medical(user):
+    # Ordinary role names are display labels and must never grant administrator access.
+    return user.role == "super_admin" or bool(
+        user.department_id and user.department in {"医院", "护理部"}
+    )
+
+
+def require_medical_view(user):
+    if not can_view_medical(user):
+        raise HTTPException(403, "医疗设备仅医院、护理部及超级管理员可查看")
+
+
+def check_medical_record(item, user):
+    if (
+        getattr(item, "__tablename__", "") == "medical_assets"
+        or getattr(item, "asset_type", None) == "medical"
+        or getattr(item, "table_name", None) == "medical_assets"
+    ):
+        require_medical_view(user)
+
+
+def filter_medical_records(query, model, user):
+    if can_view_medical(user):
+        return query
+    if getattr(model, "__tablename__", "") == "medical_assets":
+        return query.filter(False)
+    if hasattr(model, "asset_type"):
+        query = query.filter((model.asset_type.is_(None)) | (model.asset_type != "medical"))
+    if hasattr(model, "table_name"):
+        query = query.filter(model.table_name != "medical_assets")
+    return query
+
+
 def scope_query(query, model, user):
+    query = filter_medical_records(query, model, user)
     if hasattr(model, "asset_number") or getattr(model, "__tablename__", "") == "phone_numbers":
         query = query.filter(model.status != "archived")
     if user.role == "super_admin" or user.data_scope in ("all", "all_read_dept_write"):
@@ -103,6 +137,7 @@ def scope_query(query, model, user):
 
 
 def check_scope(item, user):
+    check_medical_record(item, user)
     if user.role == "super_admin" or user.data_scope == "all":
         return
     item_department_id = getattr(item, "department_id", None)

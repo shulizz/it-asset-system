@@ -1,4 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { currentUser } from '../userState'
+import { hasMedicalAccess } from '../medicalAccess'
 import Login from '../views/Login.vue'
 import Layout from '../views/Layout.vue'
 import Dashboard from '../views/Dashboard.vue'
@@ -54,6 +56,7 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   if (to.path !== '/login' && !token) next('/login')
+  else if (to.path === '/assets-medical' && !hasMedicalAccess(currentUser.value)) next('/dashboard')
   else next()
 })
 

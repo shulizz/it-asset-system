@@ -18,7 +18,7 @@
         <div class="num">{{ total.phone }}</div>
         <div class="label">手机</div>
       </div>
-      <div class="card">
+      <div v-if="canViewMedical" class="card">
         <div class="num">{{ total.medical }}</div>
         <div class="label">医疗设备</div>
       </div>
@@ -58,7 +58,7 @@
               <th>部门</th>
               <th>IT设备</th>
               <th>手机</th>
-              <th>医疗</th>
+              <th v-if="canViewMedical">医疗</th>
               <th>电话</th>
             </tr>
           </thead>
@@ -67,7 +67,7 @@
               <td>{{ d.name }}</td>
               <td>{{ d.it }}</td>
               <td>{{ d.phone }}</td>
-              <td>{{ d.medical }}</td>
+              <td v-if="canViewMedical">{{ d.medical }}</td>
               <td>{{ d.number }}</td>
             </tr>
           </tbody>
@@ -95,6 +95,8 @@
   </div>
 </template>
 <script setup>
+import { hasMedicalAccess } from '../medicalAccess'
+const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
 import PageHeading from '../components/PageHeading.vue'
 import TableFrame from '../components/TableFrame.vue'
 import { ref, computed, onMounted } from 'vue'
@@ -140,7 +142,9 @@ onMounted(async () => {
   const [it, phone, medical, numbers, depts, wc] = await Promise.all([
     fetchModule('/assets/it', 'IT设备'),
     fetchModule('/assets/phone', '手机'),
-    fetchModule('/assets/medical', '医疗设备'),
+    canViewMedical.value
+      ? fetchModule('/assets/medical', '医疗设备')
+      : Promise.resolve({ data: [] }),
     fetchModule('/assets/numbers', '电话号码'),
     fetchModule('/departments', '部门'),
     canWechat ? fetchModule('/wechat', '微信账号') : Promise.resolve({ data: [] }),

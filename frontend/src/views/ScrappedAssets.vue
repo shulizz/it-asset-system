@@ -14,7 +14,7 @@
         <div class="num" style="color: #7c3aed">{{ byType.phone }}</div>
         <div class="label">手机</div>
       </div>
-      <div class="card">
+      <div v-if="canViewMedical" class="card">
         <div class="num" style="color: #16a34a">{{ byType.medical }}</div>
         <div class="label">医疗</div>
       </div>
@@ -46,9 +46,12 @@
   </div>
 </template>
 <script setup>
+import { hasMedicalAccess } from '../medicalAccess'
+const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
+import { currentUser } from '../userState'
 import PageHeading from '../components/PageHeading.vue'
 import TableFrame from '../components/TableFrame.vue'
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import api from '../api'
 const list = ref([])
 const byType = ref({ it: 0, phone: 0, medical: 0 })
@@ -56,7 +59,7 @@ onMounted(async () => {
   const [it, phone, medical] = await Promise.all([
     api.get('/assets/it'),
     api.get('/assets/phone'),
-    api.get('/assets/medical'),
+    canViewMedical.value ? api.get('/assets/medical') : Promise.resolve({ data: [] }),
   ])
   const sc = [
     ...it.data.filter((x) => x.status === 'scrapped').map((x) => ({ ...x, type: 'IT设备' })),

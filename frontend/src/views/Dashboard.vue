@@ -67,7 +67,7 @@
             <span class="label-sm">手机设备</span><strong>{{ phoneCount }}</strong>
           </div>
         </div>
-        <div class="mini-stat">
+        <div v-if="canViewMedical" class="mini-stat">
           <AppIcon name="medical" />
           <div>
             <span class="label-sm">医疗设备</span><strong>{{ medicalCount }}</strong>
@@ -226,6 +226,8 @@
 </template>
 
 <script setup>
+import { hasMedicalAccess } from '../medicalAccess'
+const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
 import AppIcon from '../components/AppIcon.vue'
 import PageHeading from '../components/PageHeading.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -237,9 +239,10 @@ import ExpiryEmailDialog from '../components/ExpiryEmailDialog.vue'
 
 const user = currentUser
 const perms = computed(() => user.value.permissions || [])
-const canSeeMedical = computed(() => perms.value.includes('assets'))
+const canSeeMedical = computed(() => canViewMedical.value && perms.value.includes('assets'))
 const canSendEmail = computed(
   () =>
+    canViewMedical.value &&
     perms.value.includes('assets_write') &&
     (user.value.role === 'super_admin' || user.value.data_scope === 'all'),
 )
@@ -258,6 +261,7 @@ const pendingCount = ref(0)
 const expiringList = ref([])
 const calibrationList = ref([])
 async function safeGet(url) {
+  if (url === '/assets/medical' && !canViewMedical.value) return []
   try {
     const r = await api.get(url)
     return r.data || []

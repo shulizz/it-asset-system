@@ -3,7 +3,14 @@ from typing import Literal, Optional
 from uuid import uuid4
 
 from database import get_db, get_write_db
-from deps import check_scope, get_current_user, get_user_permissions, require_approver
+from deps import (
+    check_medical_record,
+    check_scope,
+    filter_medical_records,
+    get_current_user,
+    get_user_permissions,
+    require_approver,
+)
 from fastapi import APIRouter, Depends, HTTPException
 from models import (
     DeleteRequest,
@@ -47,6 +54,7 @@ def pending_request(item_id, db, user):
     item = db.get(DeleteRequest, item_id)
     if not item:
         raise HTTPException(404, "申请不存在")
+    check_medical_record(item, user)
     if not request_in_scope(item, user, db):
         raise HTTPException(403, "只能审批本部门申请")
     if item.status != "pending":
@@ -71,7 +79,7 @@ class DeleteReqIn(BaseModel):
 
 @router.get("")
 def list_requests(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    query = db.query(DeleteRequest)
+    query = filter_medical_records(db.query(DeleteRequest), DeleteRequest, current_user)
     if "approval" not in get_user_permissions(current_user, db):
         query = query.filter(DeleteRequest.applicant_id == current_user.id)
     elif current_user.role != "super_admin" and current_user.data_scope != "all":

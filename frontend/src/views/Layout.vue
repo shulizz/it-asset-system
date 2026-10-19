@@ -33,7 +33,7 @@
           <router-link to="/assets-phone" class="nav-item"
             ><AppIcon name="phone" />手机设备</router-link
           >
-          <router-link to="/assets-medical" class="nav-item"
+          <router-link v-if="canViewMedical" to="/assets-medical" class="nav-item"
             ><AppIcon name="medical" />医疗设备</router-link
           >
           <router-link to="/phone-numbers" class="nav-item"
@@ -145,6 +145,8 @@
 </template>
 
 <script setup>
+import { hasMedicalAccess } from '../medicalAccess'
+const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
 import AppIcon from '../components/AppIcon.vue'
 import { computed, onMounted, ref, onUnmounted } from 'vue'
 import { currentUser, refreshCurrentUser, clearSession } from '../userState'

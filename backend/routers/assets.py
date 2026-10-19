@@ -2,7 +2,14 @@ from datetime import date
 from typing import Literal, Optional
 
 from database import get_db, get_write_db
-from deps import check_scope, require_any, require_perm, scope_query
+from deps import (
+    can_view_medical,
+    check_scope,
+    require_any,
+    require_medical_view,
+    require_perm,
+    scope_query,
+)
 from fastapi import APIRouter, Depends, HTTPException
 from medical_dates import validate_calibration_dates
 from models import Department, ITAsset, MedicalAsset, OperationLog, PhoneAsset, PhoneNumber, User
@@ -279,6 +286,7 @@ def list_medical(
         )
     ),
 ):
+    require_medical_view(current_user)
     return scope_query(db.query(MedicalAsset), MedicalAsset, current_user).all()
 
 
@@ -454,6 +462,7 @@ def list_expiring(
         )
     ),
 ):
+    require_medical_view(current_user)
     if not 1 <= days <= 365:
         raise HTTPException(400, "提醒天数必须在1至365之间")
     from notifier import get_expiring_medical
@@ -466,6 +475,7 @@ class ExpiryEmailIn(BaseModel):
 
 
 def require_global_notice_sender(user):
+    require_medical_view(user)
     if user.role != "super_admin" and user.data_scope != "all":
         raise HTTPException(403, "发送全局到期提醒需要全部部门数据范围")
 
@@ -484,7 +494,9 @@ def notice_recipients(
         .all()
     )
     return {
-        "users": [{"id": u.id, "name": u.name, "email": u.email} for u in users],
+        "users": [
+            {"id": u.id, "name": u.name, "email": u.email} for u in users if can_view_medical(u)
+        ],
         "smtp_configured": smtp_configured(),
     }
 
@@ -508,6 +520,8 @@ def send_expiry_email(
     )
     if len(users) != len(ids):
         raise HTTPException(400, "所选用户已停用、被删除或未填写邮箱，请刷新收件人列表")
+    if any(not can_view_medical(user) for user in users):
+        raise HTTPException(403, "医疗提醒只能发送给医院、护理部及超级管理员")
     recipients = list(dict.fromkeys(u.email for u in users))
     from notifier import send_expiry_notice
 

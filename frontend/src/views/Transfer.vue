@@ -57,7 +57,7 @@
           <select v-model="form.assetType" @change="loadAssets">
             <option value="it">IT 设备</option>
             <option value="phone">手机设备</option>
-            <option value="medical">医疗设备</option>
+            <option v-if="canViewMedical" value="medical">医疗设备</option>
           </select>
         </div>
         <div class="form-row">
@@ -94,6 +94,9 @@
   </div>
 </template>
 <script setup>
+import { hasMedicalAccess } from '../medicalAccess'
+const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
+import { currentUser } from '../userState'
 import PageHeading from '../components/PageHeading.vue'
 import TableFrame from '../components/TableFrame.vue'
 import { ref, computed, onMounted } from 'vue'

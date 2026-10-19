@@ -3,7 +3,7 @@ from io import BytesIO
 
 from credential_crypto import encrypt_credential
 from database import get_db, get_write_db
-from deps import get_current_user, get_user_permissions, scope_query
+from deps import get_current_user, get_user_permissions, require_medical_view, scope_query
 from excel_input import MAX_UPLOAD, read_rows
 from excel_output import append_text_row, export_workbook, workbook_response
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -137,6 +137,8 @@ def _get_module(name: str):
 
 
 def _authorize_module(module: str, user: User, db: Session, action="export"):
+    if module == "medical":
+        require_medical_view(user)
     required = module_permission(module)
     if (
         module in ("department", "wechat")

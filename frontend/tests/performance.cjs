@@ -24,6 +24,7 @@ function component(file, context, bindings) {
   context.currentUser = { value: { permissions: [] } }
   context.refreshCurrentUser = (signal) => context.api.get('/auth/me', { signal })
   context.clearSession = () => {}
+  context.hasMedicalAccess ||= () => true
   vm.createContext(context)
   vm.runInContext(code + `\nglobalThis.state={${bindings}}`, context)
   return { state: context.state, mounted, unmounted }

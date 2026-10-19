@@ -23,6 +23,7 @@ function component(file, context, bindings) {
   context.refreshCurrentUser = async () => {
     context.currentUser.value = (await context.api.get('/auth/me')).data
   }
+  context.hasMedicalAccess ||= () => true
   vm.createContext(context)
   vm.runInContext(code + `\nglobalThis.state = {${bindings.join(',')}}`, context)
   return { state: context.state, mounted, context }

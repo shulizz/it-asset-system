@@ -14,7 +14,7 @@
         <div class="num" style="color: #7c3aed">{{ byType.phone }}</div>
         <div class="label">手机</div>
       </div>
-      <div class="card">
+      <div v-if="canViewMedical" class="card">
         <div class="num" style="color: #16a34a">{{ byType.medical }}</div>
         <div class="label">医疗</div>
       </div>
@@ -65,9 +65,12 @@
   </div>
 </template>
 <script setup>
+import { hasMedicalAccess } from '../medicalAccess'
+const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
+import { currentUser } from '../userState'
 import PageHeading from '../components/PageHeading.vue'
 import TableFrame from '../components/TableFrame.vue'
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
 const router = useRouter()
@@ -77,7 +80,9 @@ onMounted(async () => {
   const [it, phone, medical, numbers, wechat] = await Promise.all([
     api.get('/assets/it').catch(() => ({ data: [] })),
     api.get('/assets/phone').catch(() => ({ data: [] })),
-    api.get('/assets/medical').catch(() => ({ data: [] })),
+    canViewMedical.value
+      ? api.get('/assets/medical').catch(() => ({ data: [] }))
+      : Promise.resolve({ data: [] }),
     api.get('/assets/numbers').catch(() => ({ data: [] })),
     api.get('/wechat').catch(() => ({ data: [] })),
   ])
