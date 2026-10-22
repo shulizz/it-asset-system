@@ -31,7 +31,14 @@
               >原值（元）<input v-model="extra.originalValue" type="number" min="0" step="0.01"
             /></label>
             <label>保管 / 使用人<input v-model="extra.custodian" maxlength="40" /></label>
-            <label>数量<input v-model="extra.quantity" type="number" min="1" step="1" /></label>
+            <label
+              >数量<input
+                v-model="extra.quantity"
+                :disabled="!!record"
+                type="number"
+                min="1"
+                step="1"
+            /></label>
             <label v-if="!record"
               >报废原因<textarea v-model="extra.reason" maxlength="600" rows="3"></textarea>
             </label>
@@ -66,7 +73,7 @@ const extra = reactive({
   purchaseDate: '',
   originalValue: '',
   custodian: '',
-  quantity: '',
+  quantity: props.record?.quantity ?? '',
   reason: '',
   notes: props.record?.notes || '',
 })

@@ -43,6 +43,259 @@ from sqlalchemy import create_engine, text
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_phone_quantity_additive_migration_preserves_legacy_rows(self):
+        from migrations import migrate_schema
+
+        with tempfile.TemporaryDirectory() as folder:
+            old_engine = create_engine("sqlite:///" + str(Path(folder) / "legacy.db"))
+            Base.metadata.create_all(old_engine)
+            with old_engine.begin() as connection:
+                connection.execute(text("ALTER TABLE phone_assets DROP COLUMN quantity"))
+                connection.execute(text("ALTER TABLE phone_assets DROP COLUMN revision"))
+                connection.execute(
+                    text(
+                        "INSERT INTO phone_assets (asset_number,brand_model,status) VALUES ('LEGACY','原手机','idle')"
+                    )
+                )
+            migrate_schema(old_engine)
+            migrate_schema(old_engine)
+            with old_engine.connect() as connection:
+                row = connection.execute(
+                    text("SELECT asset_number,brand_model,quantity,revision FROM phone_assets")
+                ).one()
+                self.assertEqual(tuple(row), ("LEGACY", "原手机", 1, 0))
+            old_engine.dispose()
+
+    def test_phone_approved_application_splits_quantity(self):
+        phone = self.create_phone_batch()
+        request = self.client.post(
+            "/api/delete-request",
+            headers=self.headers(2),
+            json={
+                "table_name": "apply_requests",
+                "record_desc": "手机调拨",
+                "reason": "测试",
+                "application_type": "transfer",
+                "asset_type": "phone",
+                "asset_id": phone["id"],
+                "target_user": "李四",
+                "target_department_id": 1,
+                "quantity": 4,
+            },
+        )
+        self.assertEqual(request.status_code, 200, request.text)
+        result = self.client.put(
+            f"/api/delete-request/{request.json()['id']}/approve", headers=self.headers(3)
+        )
+        self.assertEqual(result.status_code, 200, result.text)
+        from models import PhoneAsset
+
+        with SessionLocal() as db:
+            self.assertEqual(db.get(PhoneAsset, phone["id"]).quantity, 16)
+            target = db.query(PhoneAsset).filter(PhoneAsset.user_name == "李四").one()
+            self.assertEqual(target.quantity, 4)
+
+    def create_phone_batch(self, quantity=20):
+        response = self.client.post(
+            "/api/assets/phone",
+            headers=self.headers(3),
+            json={
+                "brand_model": "同型号测试手机",
+                "user_name": "张三",
+                "department": "甲部门",
+                "quantity": quantity,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()
+
+    def test_phone_partial_scrap_conserves_quantity_and_print_request(self):
+        phone = self.create_phone_batch()
+        response = self.client.post(
+            "/api/scrap",
+            headers=self.headers(2),
+            json={
+                "asset_type": "phone",
+                "asset_id": phone["id"],
+                "asset_desc": "test",
+                "quantity": 3,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        request = response.json()
+        self.assertEqual(request["quantity"], 3)
+        self.assertEqual(
+            self.client.put(
+                f"/api/scrap/{request['id']}/approve", headers=self.headers(3)
+            ).status_code,
+            200,
+        )
+        from models import PhoneAsset
+
+        with SessionLocal() as db:
+            source = db.get(PhoneAsset, phone["id"])
+            self.assertEqual(
+                (source.quantity, source.status, source.user_name), (17, "in_use", "张三")
+            )
+            scraps = db.query(PhoneAsset).filter(PhoneAsset.status == "scrapped").all()
+            self.assertEqual([(x.quantity, x.department_id) for x in scraps], [(3, 1)])
+            record = db.query(TransferRecord).one()
+            self.assertEqual(
+                (record.quantity, record.asset_id, record.result_asset_id),
+                (3, source.id, scraps[0].id),
+            )
+            self.assertEqual(sum(x.quantity for x in db.query(PhoneAsset).all()), 20)
+        self.assertEqual(
+            self.client.put(
+                f"/api/scrap/{request['id']}/approve", headers=self.headers(3)
+            ).status_code,
+            400,
+        )
+
+    def test_phone_partial_transfer_return_and_full_transition(self):
+        phone = self.create_phone_batch()
+
+        def transfer(asset_id, quantity, action, recipient="李四", department="乙部门"):
+            return self.client.post(
+                "/api/transfer",
+                headers=self.headers(1),
+                json={
+                    "transfer_number": "ignored",
+                    "type": action,
+                    "asset_desc": "ignored",
+                    "asset_type": "phone",
+                    "asset_id": asset_id,
+                    "quantity": quantity,
+                    "new_user": recipient,
+                    "new_dept": department,
+                },
+            )
+
+        moved = transfer(phone["id"], 5, "transfer")
+        self.assertEqual(moved.status_code, 200, moved.text)
+        target_id = moved.json()["result_asset_id"]
+        self.assertNotEqual(target_id, phone["id"])
+        from models import PhoneAsset
+
+        with SessionLocal() as db:
+            self.assertEqual(
+                (
+                    db.get(PhoneAsset, phone["id"]).quantity,
+                    db.get(PhoneAsset, phone["id"]).department_id,
+                ),
+                (15, 1),
+            )
+            target = db.get(PhoneAsset, target_id)
+            self.assertEqual(
+                (target.quantity, target.department_id, target.user_name), (5, 2, "李四")
+            )
+        returned = transfer(target_id, 2, "return", "", "")
+        self.assertEqual(returned.status_code, 200, returned.text)
+        idle_id = returned.json()["result_asset_id"]
+        self.assertEqual(transfer(idle_id, 2, "checkout", "王五").status_code, 200)
+        with SessionLocal() as db:
+            self.assertEqual(sum(x.quantity for x in db.query(PhoneAsset)), 20)
+            self.assertEqual(db.get(PhoneAsset, idle_id).user_name, "王五")
+
+    def test_phone_quantity_validation_scope_and_legacy_edit(self):
+        for quantity in [0, -1, 1.5, True, "3", 100001]:
+            response = self.client.post(
+                "/api/assets/phone",
+                headers=self.headers(3),
+                json={"brand_model": "test", "department": "甲部门", "quantity": quantity},
+            )
+            self.assertEqual(response.status_code, 422, response.text)
+        phone = self.create_phone_batch()
+        response = self.client.put(
+            f"/api/assets/phone/{phone['id']}",
+            headers=self.headers(3),
+            json={"brand_model": "更新型号"},
+        )
+        self.assertEqual(response.json()["quantity"], 20)
+        self.assertEqual(
+            self.client.post(
+                "/api/assets/phone",
+                headers=self.headers(3),
+                json={"brand_model": "bad", "department": "乙部门", "quantity": 10},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/assets/phone",
+                headers=self.headers(3),
+                json={
+                    "brand_model": "bad",
+                    "department": "甲部门",
+                    "quantity": 10,
+                    "imei": "single",
+                },
+            ).status_code,
+            400,
+        )
+        payload = {
+            "asset_type": "phone",
+            "asset_id": phone["id"],
+            "asset_desc": "test",
+            "quantity": 21,
+        }
+        self.assertEqual(
+            self.client.post("/api/scrap", headers=self.headers(2), json=payload).status_code, 409
+        )
+
+    def test_phone_pending_request_rejects_changed_batch(self):
+        phone = self.create_phone_batch()
+        payload = {
+            "asset_type": "phone",
+            "asset_id": phone["id"],
+            "asset_desc": "test",
+            "quantity": 12,
+        }
+        first = self.client.post("/api/scrap", headers=self.headers(2), json=payload).json()
+        second = self.client.post("/api/scrap", headers=self.headers(2), json=payload).json()
+        self.assertEqual(
+            self.client.put(
+                f"/api/scrap/{first['id']}/approve", headers=self.headers(3)
+            ).status_code,
+            200,
+        )
+        response = self.client.put(f"/api/scrap/{second['id']}/approve", headers=self.headers(3))
+        self.assertEqual(response.status_code, 409, response.text)
+        from models import PhoneAsset, ScrapRequest
+
+        with SessionLocal() as db:
+            self.assertEqual(db.get(PhoneAsset, phone["id"]).quantity, 8)
+            self.assertEqual(db.get(ScrapRequest, second["id"]).status, "pending_approval")
+
+    def test_phone_excel_quantity_round_trip_and_department_totals(self):
+        wb = openpyxl.Workbook()
+        wb.active.append(["品牌型号", "部门", "使用人", "数量"])
+        for value in [20, 0, 2.5, "bad"]:
+            wb.active.append(["Excel手机", "甲部门", "张三", value])
+        buf = BytesIO()
+        wb.save(buf)
+        response = self.client.post(
+            "/api/ie/phone/import",
+            headers=self.headers(1),
+            files={
+                "file": (
+                    "phone.xlsx",
+                    buf.getvalue(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual((response.json()["imported"], response.json()["skipped"]), (1, 3))
+        exported = self.client.get("/api/ie/phone/export", headers=self.headers(1))
+        book = openpyxl.load_workbook(BytesIO(exported.content))
+        rows = list(book.active.values)
+        self.assertEqual(rows[1][rows[0].index("数量")], 20)
+        report = self.client.get("/api/reports/export", headers=self.headers(1))
+        book = openpyxl.load_workbook(BytesIO(report.content))
+        rows = list(book["部门统计"].values)
+        self.assertEqual(rows[1][rows[0].index("手机设备")], 20)
+
     def test_wechat_basic_edit_is_independent_of_asset_scope_and_secrets(self):
         with SessionLocal() as db:
             user = db.get(User, 3)

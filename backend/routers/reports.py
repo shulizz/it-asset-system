@@ -49,7 +49,17 @@ def export_report(db: Session = Depends(get_db), user=Depends(require_perm("repo
                     key = row[department_index] or "未分配部门"
                     distribution.setdefault(
                         key, dict.fromkeys(["it", "phone", "medical", "number"], 0)
-                    )[module] += 1
+                    )[module] += (
+                        row[
+                            next(
+                                index
+                                for index, field in enumerate(fields)
+                                if field[1] == "quantity"
+                            )
+                        ]
+                        if module == "phone"
+                        else 1
+                    )
         ws = wb.create_sheet("部门统计")
         statistic_modules = [module for module in modules if module != "wechat"]
         ws.append(["部门"] + [MODULES[module]["label"] for module in statistic_modules])

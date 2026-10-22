@@ -3,6 +3,7 @@ export function applicationRows(requests, scraps) {
     ...requests
       .filter((r) => r.table_name === 'apply_requests')
       .map((r) => ({
+        quantity: r.quantity ?? 1,
         key: `apply-${r.id}`,
         request_no: `AP-${r.id}`,
         type: r.application_type || '设备申请',
@@ -13,6 +14,7 @@ export function applicationRows(requests, scraps) {
         created_at: r.created_at,
       })),
     ...scraps.map((r) => ({
+      quantity: r.quantity ?? 1,
       key: `scrap-${r.id}`,
       request_no: r.request_number,
       type: 'scrap',

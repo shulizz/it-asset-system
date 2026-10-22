@@ -26,6 +26,10 @@ function component(file, context, bindings) {
   context.clearSession = () => {}
   context.hasMedicalAccess ||= () => true
   vm.createContext(context)
+  vm.runInContext(
+    fs.readFileSync(path.join(root, 'assetQuantity.js'), 'utf8').replace(/^export /gm, ''),
+    context,
+  )
   vm.runInContext(code + `\nglobalThis.state={${bindings}}`, context)
   return { state: context.state, mounted, unmounted }
 }

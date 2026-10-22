@@ -12,6 +12,7 @@
             <th>申请号</th>
             <th>申请类型</th>
             <th>申请内容</th>
+            <th>数量</th>
             <th>使用人</th>
             <th>部门</th>
             <th>状态</th>
@@ -25,6 +26,7 @@
               <span class="badge" :class="typeClass(item.type)">{{ typeText(item.type) }}</span>
             </td>
             <td>{{ item.content }}</td>
+            <td>{{ item.quantity ?? 1 }}</td>
             <td>{{ item.user_name || '—' }}</td>
             <td>{{ item.department || '—' }}</td>
             <td>
@@ -72,6 +74,18 @@
             </option>
           </select>
         </div>
+        <div class="form-row" v-if="form.assetType === 'phone'">
+          <label>本次数量（台）</label
+          ><input
+            aria-label="本次数量（台）"
+            type="number"
+            min="1"
+            step="1"
+            :max="assetList.find((a) => a.id === form.assetId)?.quantity || 1"
+            v-model.number="form.quantity"
+          />
+          <span>现有 {{ assetList.find((a) => a.id === form.assetId)?.quantity || 1 }} 台</span>
+        </div>
         <div class="form-row">
           <label>申请说明</label
           ><textarea v-model="form.content" rows="3" placeholder="说明需要什么设备/用途"></textarea>
@@ -108,6 +122,7 @@ const form = ref({
   type: 'scrap',
   assetType: '',
   deptFilter: '',
+  quantity: 1,
   assetId: null,
   content: '',
   user_name: '',
@@ -115,6 +130,8 @@ const form = ref({
 })
 const assetList = ref([])
 async function loadAssets() {
+  form.value.assetId = null
+  form.value.quantity = 1
   if (!form.value.assetType) {
     assetList.value = []
     return
@@ -127,10 +144,12 @@ async function loadAssets() {
 }
 function onTypeChange() {
   form.value.assetType = ''
+  form.value.quantity = 1
   form.value.assetId = null
   assetList.value = []
 }
 function onAssetSelect() {
+  form.value.quantity = 1
   const a = assetList.value.find((x) => x.id === form.value.assetId)
   if (a) form.value.content = `${a.asset_number} ${a.name || a.brand_model}`
 }
@@ -156,6 +175,7 @@ async function save() {
         asset_desc: form.value.content,
         asset_type: form.value.assetType || 'it',
         asset_id: form.value.assetId,
+        quantity: form.value.assetType === 'phone' ? form.value.quantity : 1,
         applicant: '部门主管',
         department: form.value.department,
         reason: form.value.content,
@@ -173,6 +193,7 @@ async function save() {
           deptList.value.find((d) => d.name === form.value.department)?.id || null,
         asset_type: form.value.assetType,
         asset_id: form.value.assetId,
+        quantity: form.value.assetType === 'phone' ? form.value.quantity : 1,
         applicant: '部门主管',
       })
     }
@@ -190,6 +211,7 @@ async function save() {
     type: 'scrap',
     assetType: '',
     deptFilter: '',
+    quantity: 1,
     assetId: null,
     content: '',
     user_name: '',

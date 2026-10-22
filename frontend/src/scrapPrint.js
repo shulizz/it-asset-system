@@ -55,7 +55,7 @@ export function buildScrapPrintDocument(record, extra = {}) {
         <tr><th>设备名称及编号</th><td colspan="3">${field(item.asset_desc)}</td></tr>
         <tr><th>设备类型</th><td>${field(typeText(item.asset_type))}</td><th>规格型号</th><td>${field(extra.model)}</td></tr>
         <tr><th>购置日期</th><td>${field(extra.purchaseDate)}</td><th>原值（元）</th><td>${field(extra.originalValue)}</td></tr>
-        <tr><th>保管 / 使用人</th><td>${field(extra.custodian)}</td><th>数量</th><td>${field(extra.quantity)}</td></tr>
+        <tr><th>保管 / 使用人</th><td>${field(extra.custodian)}</td><th>数量</th><td>${field(record ? (item.quantity ?? 1) : extra.quantity)}</td></tr>
         <tr><th>报废原因</th><td colspan="3" class="reason">${field(record ? item.reason : extra.reason)}</td></tr>
         <tr><th>技术鉴定意见</th><td colspan="3" class="opinion"><span class="signature">鉴定人：____________　日期：____________</span></td></tr>
         <tr><th>部门意见</th><td colspan="3" class="opinion"><span class="signature">负责人：____________　日期：____________</span></td></tr>

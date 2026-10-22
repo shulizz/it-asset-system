@@ -15,7 +15,11 @@ def migrate_schema(engine):
                 "email VARCHAR(254)",
             ],
             "it_assets": ["department_id INTEGER", "model VARCHAR(100)", "notes VARCHAR(500)"],
-            "phone_assets": ["department_id INTEGER"],
+            "phone_assets": [
+                "revision INTEGER NOT NULL DEFAULT 0",
+                "department_id INTEGER",
+                "quantity INTEGER NOT NULL DEFAULT 1",
+            ],
             "medical_assets": [
                 "department_id INTEGER",
                 "calibration_date DATE",
@@ -58,6 +62,8 @@ def migrate_workflow(engine):
     columns = {
         "users": ["token_version INTEGER NOT NULL DEFAULT 0"],
         "transfer_records": [
+            "quantity INTEGER NOT NULL DEFAULT 1",
+            "result_asset_id INTEGER",
             "new_user VARCHAR(50)",
             "new_dept VARCHAR(50)",
             "department_id INTEGER",
@@ -65,8 +71,16 @@ def migrate_workflow(engine):
             "operator_id INTEGER",
             "old_user VARCHAR(50)",
         ],
-        "scrap_requests": ["department_id INTEGER", "applicant_id INTEGER", "approver_id INTEGER"],
+        "scrap_requests": [
+            "source_revision INTEGER",
+            "department_id INTEGER",
+            "applicant_id INTEGER",
+            "approver_id INTEGER",
+            "quantity INTEGER NOT NULL DEFAULT 1",
+        ],
         "delete_requests": [
+            "source_revision INTEGER",
+            "quantity INTEGER NOT NULL DEFAULT 1",
             "department_id INTEGER",
             "applicant_id INTEGER",
             "approver_id INTEGER",

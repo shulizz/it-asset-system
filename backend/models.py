@@ -70,6 +70,8 @@ class ITAsset(Base):
 
 # ===== 手机设备 =====
 class PhoneAsset(Base):
+    revision = Column(Integer, nullable=False, default=0, server_default="0")
+    quantity = Column(Integer, nullable=False, default=1, server_default="1")
     __tablename__ = "phone_assets"
     id = Column(Integer, primary_key=True, index=True)
     asset_number = Column(String(50), unique=True, index=True, nullable=False)
@@ -122,6 +124,8 @@ class PhoneNumber(Base):
 
 # ===== 设备流转记录 =====
 class TransferRecord(Base):
+    result_asset_id = Column(Integer)
+    quantity = Column(Integer, nullable=False, default=1, server_default="1")
     department_id = Column(Integer, ForeignKey("departments.id"), index=True)
     new_department_id = Column(Integer, ForeignKey("departments.id"), index=True)
     operator_id = Column(Integer, ForeignKey("users.id"))
@@ -144,6 +148,8 @@ class TransferRecord(Base):
 
 # ===== 报废申请 =====
 class ScrapRequest(Base):
+    source_revision = Column(Integer)
+    quantity = Column(Integer, nullable=False, default=1, server_default="1")
     department_id = Column(Integer, ForeignKey("departments.id"), index=True)
     applicant_id = Column(Integer, ForeignKey("users.id"), index=True)
     approver_id = Column(Integer, ForeignKey("users.id"))
@@ -165,6 +171,8 @@ class ScrapRequest(Base):
 
 # ===== 删除申请 =====
 class DeleteRequest(Base):
+    source_revision = Column(Integer)
+    quantity = Column(Integer, nullable=False, default=1, server_default="1")
     department_id = Column(Integer, ForeignKey("departments.id"), index=True)
     applicant_id = Column(Integer, ForeignKey("users.id"), index=True)
     approver_id = Column(Integer, ForeignKey("users.id"))

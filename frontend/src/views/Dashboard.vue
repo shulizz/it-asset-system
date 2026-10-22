@@ -226,6 +226,7 @@
 </template>
 
 <script setup>
+import { assetQuantity, totalQuantity } from '../assetQuantity'
 import { hasMedicalAccess } from '../medicalAccess'
 const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
 import AppIcon from '../components/AppIcon.vue'
@@ -290,10 +291,10 @@ onMounted(async () => {
   // 全部资产类型纳入统计：IT设备、手机、医疗、电话号码、微信
   const totals = { total: 0, inUse: 0, idle: 0 }
   for (const assets of [it, ph, med, num, wc]) {
-    totals.total += assets.length
+    totals.total += totalQuantity(assets)
     for (const item of assets) {
-      if (item.status === 'in_use') totals.inUse++
-      else if (item.status === 'idle') totals.idle++
+      if (item.status === 'in_use') totals.inUse += assetQuantity(item)
+      else if (item.status === 'idle') totals.idle += assetQuantity(item)
     }
   }
   stats.value = totals
@@ -325,7 +326,7 @@ onMounted(async () => {
   pendingCount.value = count
 
   transferList.value = tr.slice(0, 5)
-  phoneCount.value = ph.length
+  phoneCount.value = totalQuantity(ph)
   medicalCount.value = med.length
   numberCount.value = num.length
   deptCount.value = dept.length

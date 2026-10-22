@@ -3,7 +3,7 @@
     <PageHeading title="报废设备" description="查阅已报废设备，保留历史资产信息。"></PageHeading>
     <div class="stats" style="margin-bottom: 20px">
       <div class="card">
-        <div class="num" style="color: #dc2626">{{ list.length }}</div>
+        <div class="num" style="color: #dc2626">{{ totalQuantity(list) }}</div>
         <div class="label">报废设备总数</div>
       </div>
       <div class="card">
@@ -25,6 +25,7 @@
           <tr>
             <th>资产编号</th>
             <th>名称</th>
+            <th>数量</th>
             <th>类型</th>
             <th>原部门</th>
             <th>状态</th>
@@ -34,6 +35,7 @@
           <tr v-for="item in list" :key="item.key">
             <td>{{ item.asset_number || item.number }}</td>
             <td>{{ item.name || item.brand_model }}</td>
+            <td>{{ assetQuantity(item) }}</td>
             <td>
               <span class="badge" :class="typeClass(item.type)">{{ item.type }}</span>
             </td>
@@ -46,6 +48,7 @@
   </div>
 </template>
 <script setup>
+import { assetQuantity, totalQuantity } from '../assetQuantity'
 import { hasMedicalAccess } from '../medicalAccess'
 const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
 import { currentUser } from '../userState'
@@ -69,7 +72,7 @@ onMounted(async () => {
   list.value = sc.map((x, i) => ({ ...x, key: i }))
   byType.value = {
     it: it.data.filter((x) => x.status === 'scrapped').length,
-    phone: phone.data.filter((x) => x.status === 'scrapped').length,
+    phone: totalQuantity(phone.data.filter((x) => x.status === 'scrapped')),
     medical: medical.data.filter((x) => x.status === 'scrapped').length,
   }
 })

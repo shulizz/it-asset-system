@@ -14,7 +14,7 @@ from models import (
     TransferRecord,
     User,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/transfer", tags=["transfer"])
@@ -23,6 +23,7 @@ MODEL_MAP = {"it": ITAsset, "phone": PhoneAsset, "medical": MedicalAsset, "numbe
 
 
 class TransferIn(BaseModel):
+    quantity: int = Field(default=1, ge=1, le=100000, strict=True)
     transfer_number: str
     type: Literal["checkout", "return", "transfer", "offboard"]
     asset_desc: str
@@ -68,10 +69,24 @@ def create_transfer(
     if data.new_dept and not target:
         raise HTTPException(400, "目标部门不存在")
     validate_transition(
-        db, asset, data.type, current_user, data.new_user, target.id if target else None
+        db,
+        asset,
+        data.type,
+        current_user,
+        data.new_user,
+        target.id if target else None,
+        quantity=data.quantity,
     )
     item = apply_transition(
-        db, asset, data.asset_type, data.type, current_user, data.new_user, target, data.notes
+        db,
+        asset,
+        data.asset_type,
+        data.type,
+        current_user,
+        data.new_user,
+        target,
+        data.notes,
+        quantity=data.quantity,
     )
     db.add(
         OperationLog(

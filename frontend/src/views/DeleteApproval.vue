@@ -10,6 +10,7 @@
             <th>类型</th>
             <th>申请内容</th>
             <th>设备</th>
+            <th>本次数量</th>
             <th>使用人</th>
             <th>部门</th>
             <th>状态</th>
@@ -26,6 +27,7 @@
             </td>
             <td>{{ item.record_desc }}</td>
             <td>{{ item.applyAsset || '—' }}</td>
+            <td>{{ item.quantity ?? 1 }}</td>
             <td>{{ item.applyUser }}</td>
             <td>{{ item.applyDept }}</td>
             <td>
@@ -112,6 +114,7 @@
           <tr>
             <th>申请号</th>
             <th>设备</th>
+            <th>本次数量</th>
             <th>申请人</th>
             <th>原因</th>
             <th>状态</th>
@@ -122,6 +125,7 @@
           <tr v-for="item in scrapList" :key="'s' + item.id">
             <td>{{ item.request_number }}</td>
             <td>{{ item.asset_desc }}</td>
+            <td>{{ item.quantity ?? 1 }}</td>
             <td>{{ item.applicant || '—' }}</td>
             <td>{{ item.reason || '—' }}</td>
             <td>

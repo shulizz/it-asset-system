@@ -74,6 +74,8 @@ def update_asset_fields(db, item, data, user, user_field):
         setattr(item, key, value)
     sync_department_id(db, item)
     check_scope(item, user)
+    if isinstance(item, PhoneAsset):
+        item.revision += 1
 
 
 @router.get("/it")
@@ -156,6 +158,7 @@ def update_it(
 
 # ===== 手机设备 =====
 class PhoneAssetIn(BaseModel):
+    quantity: int = Field(default=1, ge=1, le=100000, strict=True)
     asset_number: Optional[str] = None
     brand_model: str
     imei: Optional[str] = None
@@ -201,6 +204,8 @@ def create_phone(
         data.status = "in_use"
     if db.query(PhoneAsset).filter(PhoneAsset.asset_number == number).first():
         raise HTTPException(409, "资产编号已存在")
+    if data.quantity > 1 and (data.imei or data.bound_number):
+        raise HTTPException(400, "合并登记多台手机时不能填写单台 IMEI 或绑定号码，请拆分登记")
     item = PhoneAsset(
         asset_number=number, **{k: v for k, v in data.model_dump().items() if k != "asset_number"}
     )
@@ -209,7 +214,10 @@ def create_phone(
     db.add(item)
     db.add(
         OperationLog(
-            user=current_user.name, module="手机设备", action="新增", detail=f"新增手机 {number}"
+            user=current_user.name,
+            module="手机设备",
+            action="新增",
+            detail=f"新增手机 {number}，数量 {item.quantity} 台",
         )
     )
     db.commit()
@@ -233,13 +241,19 @@ def update_phone(
         raise HTTPException(404, "设备不存在")
     if item.status == "scrapped":
         raise HTTPException(400, "已报废设备不能直接编辑，如需恢复请走审批流程")
+    quantity = data.quantity if "quantity" in data.model_fields_set else item.quantity
+    if quantity > 1 and (
+        (data.imei if "imei" in data.model_fields_set else item.imei)
+        or (data.bound_number if "bound_number" in data.model_fields_set else item.bound_number)
+    ):
+        raise HTTPException(400, "合并登记多台手机时不能填写单台 IMEI 或绑定号码，请拆分登记")
     update_asset_fields(db, item, data, current_user, "user_name")
     db.add(
         OperationLog(
             user=current_user.name,
             module="手机设备",
             action="编辑",
-            detail=f"编辑手机 {item.asset_number}",
+            detail=f"编辑手机 {item.asset_number}，现有数量 {item.quantity} 台",
         )
     )
     db.commit()

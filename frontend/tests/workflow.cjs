@@ -26,6 +26,10 @@ function component(file, context, bindings) {
   context.hasMedicalAccess ||= () => true
   vm.createContext(context)
   vm.runInContext(
+    fs.readFileSync(path.join(root, 'assetQuantity.js'), 'utf8').replace(/^export /gm, ''),
+    context,
+  )
+  vm.runInContext(
     fs.readFileSync(path.join(root, 'wechatAccess.js'), 'utf8').replace(/^export /gm, ''),
     context,
   )
@@ -83,6 +87,8 @@ async function main() {
             return { data: new Blob(['xlsx']) }
           }
           if (url === '/departments') return { data: [{ name: '甲部门' }] }
+          if (url === '/assets/phone')
+            return { data: [{ quantity: 20, department: '甲部门', status: 'idle' }] }
           return { data: [{ asset_number: 'IT-1', department: '甲部门', status: 'idle' }] }
         },
       },
@@ -103,6 +109,8 @@ async function main() {
   )
   await report.mounted[0]()
   assert.equal(report.state.total.value.it, 1)
+  assert.equal(report.state.total.value.phone, 20)
+  assert.equal(report.state.deptStats.value[0].phone, 20)
   assert.equal(report.state.total.value.wechat, '无权限')
   assert.equal(calls.includes('/wechat'), false)
   assert.equal(report.state.canExport.value, true)

@@ -1,9 +1,13 @@
 <template>
   <div>
-    <PageHeading title="手机设备档案" description="管理手机档案、IMEI 与号码绑定信息。"
+    <PageHeading
+      title="手机设备档案"
+      description="同部门、同使用人、同型号手机可合并登记数量；部分报废或调拨会自动拆分记录。"
       ><div style="display: flex; gap: 8px; align-items: center">
         <ImportExportButtons module="phone" />
-        <button class="btn-primary" @click="openCreateForm">+ 新增手机</button>
+        <button v-if="canWriteAssets" class="btn-primary" @click="openCreateForm">
+          + 新增手机
+        </button>
       </div></PageHeading
     >
     <div class="filter-bar">
@@ -23,12 +27,16 @@
         <option value="scrapped">已报废</option>
       </select>
     </div>
+    <p style="margin-bottom: 12px">
+      当前筛选：{{ totalQuantity(filteredList) }} 台手机，{{ filteredList.length }} 条记录
+    </p>
     <TableFrame title="手机设备台账" :count="filteredList.length"
       ><table>
         <thead>
           <tr>
             <th>资产编号</th>
             <th>品牌型号</th>
+            <th>数量（台）</th>
             <th>使用人</th>
             <th>部门</th>
             <th>状态</th>
@@ -39,6 +47,7 @@
           <tr v-for="item in filteredList" :key="item.id">
             <td>{{ item.asset_number }}</td>
             <td>{{ item.brand_model }}</td>
+            <td>{{ assetQuantity(item) }}</td>
             <td>{{ item.user_name || '—' }}</td>
             <td>{{ item.department || '—' }}</td>
             <td>
@@ -76,6 +85,17 @@
           <label>资产编号</label><input v-model="form.asset_number" disabled />
         </div>
         <div class="form-row"><label>品牌型号</label><input v-model="form.brand_model" /></div>
+        <div class="form-row">
+          <label>数量（台）</label
+          ><input
+            aria-label="数量（台）"
+            v-model.number="form.quantity"
+            type="number"
+            min="1"
+            max="100000"
+            step="1"
+          />
+        </div>
         <div class="form-row"><label>使用人</label><input v-model="form.user_name" /></div>
         <div class="form-row">
           <label>部门</label>
@@ -88,7 +108,9 @@
         </div>
         <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px">
           <button class="btn-outline" @click="showForm = false">取消</button>
-          <button class="btn-primary" @click="save">保存</button>
+          <button class="btn-primary" :disabled="saving" @click="save">
+            {{ saving ? '保存中…' : '保存' }}
+          </button>
         </div>
       </div>
     </div>
@@ -96,6 +118,7 @@
   </div>
 </template>
 <script setup>
+import { assetQuantity, totalQuantity } from '../assetQuantity'
 import PageHeading from '../components/PageHeading.vue'
 import TableFrame from '../components/TableFrame.vue'
 import { usePermissions } from '../usePermissions'
@@ -109,7 +132,8 @@ const {
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import DeleteRequestDialog from '../components/DeleteRequestDialog.vue'
-const deleteTarget = ref(null)
+const deleteTarget = ref(null),
+  saving = ref(false)
 import ImportExportButtons from '../components/ImportExportButtons.vue'
 const list = ref([]),
   showForm = ref(false),
@@ -129,6 +153,7 @@ const filteredList = computed(() => {
   })
 })
 const form = ref({
+  quantity: 1,
   asset_number: '',
   brand_model: '',
   imei: '',
@@ -141,7 +166,7 @@ async function load() {
   list.value = res.data
 }
 function edit(item) {
-  Object.assign(form.value, item)
+  form.value = { ...item, quantity: assetQuantity(item) }
   showForm.value = true
 }
 function askDelete(item) {
@@ -152,17 +177,38 @@ function askDelete(item) {
   }
 }
 async function save() {
-  if (form.value.id) await api.put(`/assets/phone/${form.value.id}`, form.value)
-  else await api.post('/assets/phone', form.value)
-  showForm.value = false
-  form.value = {
-    id: null,
-    asset_number: '',
-    brand_model: '',
-    user_name: '',
-    department: defaultAssetDepartment(),
+  if (saving.value) return
+  if (
+    !Number.isInteger(form.value.quantity) ||
+    form.value.quantity < 1 ||
+    form.value.quantity > 100000
+  ) {
+    alert('数量须为1至100000的整数')
+    return
   }
-  load()
+  saving.value = true
+  try {
+    if (form.value.id) await api.put(`/assets/phone/${form.value.id}`, form.value)
+    else await api.post('/assets/phone', form.value)
+    showForm.value = false
+    form.value = {
+      id: null,
+      quantity: 1,
+      asset_number: '',
+      brand_model: '',
+      user_name: '',
+      department: defaultAssetDepartment(),
+    }
+    await load()
+  } catch (e) {
+    alert(
+      typeof e.response?.data?.detail === 'string'
+        ? e.response.data.detail
+        : '保存失败，请检查数据后重试',
+    )
+  } finally {
+    saving.value = false
+  }
 }
 function statusClass(s) {
   return { in_use: 'green', idle: 'amber', scrapped: 'gray' }[s] || 'gray'
@@ -179,6 +225,7 @@ onMounted(async () => {
 function openCreateForm() {
   form.value = {
     id: null,
+    quantity: 1,
     asset_number: '',
     brand_model: '',
     user_name: '',

@@ -5,7 +5,8 @@ from uuid import uuid4
 
 from deps import check_scope
 from fastapi import HTTPException
-from models import Department, TransferRecord
+from models import Department, PhoneAsset, TransferRecord
+from numbering import next_asset_number
 
 
 def asset_user(asset):
@@ -16,8 +17,22 @@ def set_asset_user(asset, value):
     setattr(asset, "user_name" if hasattr(asset, "user_name") else "keeper", value)
 
 
-def validate_transition(db, asset, action, user, recipient=None, target_id=None):
+def validate_quantity(asset, quantity):
+    available = asset.quantity if isinstance(asset, PhoneAsset) else 1
+    if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
+        raise HTTPException(400, "数量必须是正整数")
+    if quantity > available:
+        raise HTTPException(409, "本次数量超过设备现有数量，请刷新后重新申请")
+
+
+def check_source_revision(asset, revision):
+    if isinstance(asset, PhoneAsset) and revision is not None and asset.revision != revision:
+        raise HTTPException(409, "申请后手机数量或归属已变更，请驳回旧申请并重新提交")
+
+
+def validate_transition(db, asset, action, user, recipient=None, target_id=None, quantity=1):
     check_scope(asset, user)
+    validate_quantity(asset, quantity)
     expected = {
         "checkout": {"idle"},
         "transfer": {"in_use"},
@@ -42,13 +57,34 @@ def validate_transition(db, asset, action, user, recipient=None, target_id=None)
     return target
 
 
-def apply_transition(db, asset, asset_type, action, user, recipient=None, target=None, notes=None):
+def apply_transition(
+    db, asset, asset_type, action, user, recipient=None, target=None, notes=None, quantity=1
+):
+    validate_quantity(asset, quantity)
+    source = asset
+    if isinstance(asset, PhoneAsset):
+        asset.revision += 1
+    # Keep the unprocessed remainder at its original owner/status; split only at execution.
+    if isinstance(asset, PhoneAsset) and quantity < asset.quantity:
+        asset.quantity -= quantity
+        values = {
+            column.name: getattr(asset, column.name)
+            for column in PhoneAsset.__table__.columns
+            if column.name not in {"id", "asset_number", "quantity"}
+        }
+        asset = PhoneAsset(
+            asset_number=next_asset_number(db, PhoneAsset, "PH"), quantity=quantity, **values
+        )
+        db.add(asset)
+        db.flush()
     record = TransferRecord(
         transfer_number="TR-" + uuid4().hex,
         type=action,
         asset_desc=f"{getattr(asset, 'asset_number', getattr(asset, 'number', ''))} {getattr(asset, 'name', getattr(asset, 'brand_model', ''))}",
         asset_type=asset_type,
-        asset_id=asset.id,
+        asset_id=source.id,
+        result_asset_id=asset.id,
+        quantity=quantity,
         operator=user.name,
         operator_id=user.id,
         counterparty=recipient or asset_user(asset),

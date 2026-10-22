@@ -52,6 +52,7 @@ MODULES = {
         "fields": [
             ("资产编号", "asset_number", False),
             ("品牌型号", "brand_model", True),
+            ("数量", "quantity", False),
             ("IMEI", "imei", False),
             ("绑定号码", "bound_number", False),
             ("使用人", "user_name", False),
@@ -254,6 +255,8 @@ def download_template(
     for cn_name, field_name, required in cfg["fields"]:
         if field_name == "name" or field_name == "brand_model":
             example.append("示例：电脑")
+        elif field_name == "quantity":
+            example.append(1)
         elif field_name == "number":
             example.append("13800000000")
         elif field_name == "wx_account":
@@ -352,6 +355,30 @@ def import_excel(
             skipped += 1
             errors.append(f"第{row_idx}行：{cn_name}，{error}")
             continue
+
+        if module == "phone":
+            from routers.assets import PhoneAssetIn
+
+            try:
+                raw = data.get("quantity")
+                if raw is None:
+                    quantity = 1
+                else:
+                    # Excel can encode integers as floats; reject decimals, booleans and text other than digits.
+                    if isinstance(raw, bool) or not str(raw).strip().isdigit():
+                        raise ValueError("数量必须是正整数")
+                    quantity = int(raw)
+                data["quantity"] = PhoneAssetIn(
+                    brand_model=str(data["brand_model"]), quantity=quantity
+                ).quantity
+                if quantity > 1 and (data.get("imei") or data.get("bound_number")):
+                    raise ValueError("多台合并登记不能填写单台 IMEI 或绑定号码")
+            except ValueError:
+                skipped += 1
+                errors.append(
+                    f"第{row_idx}行：数量须为1至100000的整数，多台登记不能填写单台 IMEI 或绑定号码"
+                )
+                continue
 
         if module == "medical":
             from medical_dates import validate_calibration_dates

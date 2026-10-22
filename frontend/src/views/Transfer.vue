@@ -10,6 +10,7 @@
             <th>工单号</th>
             <th>类型</th>
             <th>设备</th>
+            <th>本次数量</th>
             <th>经手人</th>
             <th>对方</th>
             <th>原部门</th>
@@ -27,6 +28,7 @@
               <span class="badge" :class="typeClass(item.type)">{{ typeText(item.type) }}</span>
             </td>
             <td>{{ item.asset_desc }}</td>
+            <td>{{ item.quantity ?? 1 }}</td>
             <td>{{ item.operator }}</td>
             <td>{{ item.counterparty || '—' }}</td>
             <td>{{ item.department || '—' }}</td>
@@ -73,6 +75,18 @@
           <span>当前使用人：{{ selectedAsset.user_name || selectedAsset.keeper || '无' }}</span>
           <span>当前部门：{{ selectedAsset.department || '无' }}</span>
         </div>
+        <div class="form-row" v-if="form.assetType === 'phone'">
+          <label>本次数量（台）</label
+          ><input
+            aria-label="本次数量（台）"
+            type="number"
+            min="1"
+            step="1"
+            :max="assets.find((a) => a.id === form.assetId)?.quantity || 1"
+            v-model.number="form.quantity"
+          />
+          <span>现有 {{ assets.find((a) => a.id === form.assetId)?.quantity || 1 }} 台</span>
+        </div>
         <div class="form-row">
           <label>{{ typeLabel }}</label>
           <input v-model="form.counterparty" :placeholder="typePlaceholder" />
@@ -109,6 +123,7 @@ const list = ref([]),
 const form = ref({
   type: 'checkout',
   assetType: 'it',
+  quantity: 1,
   assetId: null,
   counterparty: '',
   department: '',
@@ -142,6 +157,7 @@ async function openForm() {
   form.value = {
     type: 'checkout',
     assetType: 'it',
+    quantity: 1,
     assetId: null,
     counterparty: '',
     department: '',
@@ -157,6 +173,9 @@ function onTypeChange() {
 }
 
 async function loadAssets() {
+  form.value.quantity = 1
+  form.value.assetId = null
+  selectedAsset.value = null
   const map = {
     it: '/assets/it',
     phone: '/assets/phone',
@@ -178,6 +197,7 @@ async function loadAssets() {
   selectedAsset.value = null
 }
 function onAssetSelect() {
+  form.value.quantity = 1
   selectedAsset.value = assets.value.find((a) => a.id === form.value.assetId)
   if (selectedAsset.value && selectedAsset.value.department) {
     form.value.department = selectedAsset.value.department
@@ -189,23 +209,38 @@ async function save() {
     alert('请选择设备')
     return
   }
-  const asset = selectedAsset.value
+  const asset = assets.value.find((a) => a.id === form.value.assetId)
+  if (!asset) {
+    alert('请重新选择有效设备')
+    return
+  }
   const assetDesc = `${asset.asset_number} ${asset.name || asset.brand_model || asset.number}`
-  await api.post('/transfer', {
-    transfer_number: 'TR-' + Date.now(),
-    type: form.value.type,
-    asset_desc: assetDesc,
-    counterparty: form.value.counterparty,
-    department: form.value.department,
-    notes: form.value.notes,
-    asset_type: form.value.assetType,
-    asset_id: form.value.assetId,
-    new_user:
-      form.value.type === 'return' || form.value.type === 'offboard' ? '' : form.value.counterparty,
-    new_dept: form.value.department,
-  })
-  showForm.value = false
-  load()
+  try {
+    await api.post('/transfer', {
+      transfer_number: 'TR-' + Date.now(),
+      type: form.value.type,
+      asset_desc: assetDesc,
+      counterparty: form.value.counterparty,
+      department: form.value.department,
+      notes: form.value.notes,
+      asset_type: form.value.assetType,
+      asset_id: form.value.assetId,
+      quantity: form.value.assetType === 'phone' ? form.value.quantity : 1,
+      new_user:
+        form.value.type === 'return' || form.value.type === 'offboard'
+          ? ''
+          : form.value.counterparty,
+      new_dept: form.value.department,
+    })
+    showForm.value = false
+    await load()
+  } catch (e) {
+    alert(
+      typeof e.response?.data?.detail === 'string'
+        ? e.response.data.detail
+        : '流转保存失败，请刷新后重试',
+    )
+  }
 }
 function typeClass(t) {
   return (

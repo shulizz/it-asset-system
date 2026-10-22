@@ -13,9 +13,9 @@ from deps import (
 )
 from fastapi import APIRouter, Depends, HTTPException
 from models import ITAsset, MedicalAsset, OperationLog, PhoneAsset, PhoneNumber, ScrapRequest, User
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from workflow import apply_transition, validate_transition
+from workflow import apply_transition, check_source_revision, validate_transition
 
 router = APIRouter(prefix="/api/scrap", tags=["scrap"])
 
@@ -28,6 +28,7 @@ ASSET_MAP = {
 
 
 class ScrapIn(BaseModel):
+    quantity: int = Field(default=1, ge=1, le=100000, strict=True)
     request_number: Optional[str] = None
     asset_desc: str
     asset_type: Optional[str] = None
@@ -64,7 +65,7 @@ def create_scrap(
     if not asset:
         raise HTTPException(404, "资产不存在")
     check_scope(asset, current_user)
-    validate_transition(db, asset, "scrap", current_user)
+    validate_transition(db, asset, "scrap", current_user, quantity=data.quantity)
     data.submit_date = date.today()
     data.applicant = current_user.name
     data.department = asset.department
@@ -77,7 +78,10 @@ def create_scrap(
     data.auditor = None
     data.request_number = "SC-" + uuid4().hex
     item = ScrapRequest(
-        **data.model_dump(), applicant_id=current_user.id, department_id=asset.department_id
+        **data.model_dump(),
+        applicant_id=current_user.id,
+        department_id=asset.department_id,
+        source_revision=getattr(asset, "revision", None),
     )
     db.add(item)
     db.add(
@@ -113,11 +117,20 @@ def approve_scrap(
     asset = db.query(ASSET_MAP[item.asset_type]).get(item.asset_id)
     if not asset:
         raise HTTPException(404, "申请对应的资产不存在")
-    validate_transition(db, asset, "scrap", current_user)
+    check_source_revision(asset, item.source_revision)
+    validate_transition(db, asset, "scrap", current_user, quantity=item.quantity)
     item.status = "approved"
     item.approve_date = date.today()
     item.auditor, item.approver_id = current_user.name, current_user.id
-    apply_transition(db, asset, item.asset_type, "scrap", current_user, notes="报废审批通过")
+    apply_transition(
+        db,
+        asset,
+        item.asset_type,
+        "scrap",
+        current_user,
+        notes="报废审批通过",
+        quantity=item.quantity,
+    )
     db.add(
         OperationLog(
             user=current_user.name, module="报废管理", action="审批通过", detail=item.asset_desc

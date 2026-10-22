@@ -14,6 +14,7 @@
           <tr>
             <th>申请号</th>
             <th>设备</th>
+            <th>本次数量</th>
             <th>申请人</th>
             <th>部门</th>
             <th>原因</th>
@@ -26,6 +27,7 @@
           <tr v-for="item in list" :key="item.id">
             <td>{{ item.request_number }}</td>
             <td>{{ item.asset_desc }}</td>
+            <td>{{ item.quantity ?? 1 }}</td>
             <td>{{ item.applicant || '—' }}</td>
             <td>{{ item.department || '—' }}</td>
             <td>{{ item.reason || '—' }}</td>
@@ -80,6 +82,18 @@
           <label>部门</label>
           <input v-model="form.department" readonly />
         </div>
+        <div class="form-row" v-if="form.assetType === 'phone'">
+          <label>本次数量（台）</label
+          ><input
+            aria-label="本次数量（台）"
+            type="number"
+            min="1"
+            step="1"
+            :max="assetOptions.find((a) => a.id === form.assetId)?.quantity || 1"
+            v-model.number="form.quantity"
+          />
+          <span>现有 {{ assetOptions.find((a) => a.id === form.assetId)?.quantity || 1 }} 台</span>
+        </div>
         <div class="form-row"><label>报废原因</label><input v-model="form.reason" /></div>
         <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px">
           <button class="btn-outline" @click="showForm = false">取消</button>
@@ -131,6 +145,7 @@ function openForm() {
   formError.value = ''
   form.value = {
     assetType: '',
+    quantity: 1,
     assetId: null,
     asset_desc: '',
     applicant: currentUser.value.name || '',
@@ -142,6 +157,7 @@ function openForm() {
 }
 const form = ref({
   assetType: '',
+  quantity: 1,
   assetId: null,
   asset_desc: '',
   applicant: '',
@@ -153,6 +169,7 @@ async function load() {
   list.value = res.data
 }
 async function onTypeChange() {
+  form.value.quantity = 1
   form.value.assetId = null
   form.value.asset_desc = ''
   form.value.department = ''
@@ -181,6 +198,7 @@ async function onTypeChange() {
   }
 }
 function onAssetSelect() {
+  form.value.quantity = 1
   const a = assetOptions.value.find((x) => x.id === form.value.assetId)
   if (a) {
     form.value.asset_desc = `${a.asset_number || a.number} ${a.name || a.brand_model || ''}`
@@ -202,6 +220,7 @@ async function save() {
       asset_desc: form.value.asset_desc,
       asset_type: form.value.assetType,
       asset_id: form.value.assetId,
+      quantity: form.value.assetType === 'phone' ? form.value.quantity : 1,
       applicant: form.value.applicant,
       department: form.value.department,
       reason: form.value.reason,
@@ -209,6 +228,7 @@ async function save() {
     showForm.value = false
     form.value = {
       assetType: '',
+      quantity: 1,
       assetId: null,
       asset_desc: '',
       applicant: '',

@@ -79,6 +79,7 @@
             <tr>
               <th>编号</th>
               <th>名称</th>
+              <th>数量</th>
               <th>类型</th>
             </tr>
           </thead>
@@ -86,6 +87,7 @@
             <tr v-for="item in idleList" :key="item.key">
               <td>{{ item.asset_number || item.number }}</td>
               <td>{{ item.name || item.brand_model }}</td>
+              <td>{{ assetQuantity(item) }}</td>
               <td>{{ item.type }}</td>
             </tr>
           </tbody>
@@ -95,6 +97,7 @@
   </div>
 </template>
 <script setup>
+import { assetQuantity, totalQuantity } from '../assetQuantity'
 import { hasMedicalAccess } from '../medicalAccess'
 import { hasWeChatRead } from '../wechatAccess'
 const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
@@ -151,7 +154,7 @@ onMounted(async () => {
   if (errors.length) loadError.value = `${errors.join('、')}加载失败，相关统计不完整，请刷新重试`
   total.value = {
     it: it.data.length,
-    phone: phone.data.length,
+    phone: totalQuantity(phone.data),
     medical: medical.data.length,
     number: numbers.data.length,
     wechat: canWechat ? wc.data.filter((x) => x.wx_account).length : '无权限',
@@ -163,15 +166,15 @@ onMounted(async () => {
     ...phone.data.map((x) => ({ ...x, type: '手机' })),
     ...medical.data.map((x) => ({ ...x, type: '医疗' })),
   ]
-  status.value.inUse = all.filter((x) => x.status === 'in_use').length
-  status.value.idle = all.filter((x) => x.status === 'idle').length
-  status.value.scrapped = all.filter((x) => x.status === 'scrapped').length
+  status.value.inUse = totalQuantity(all.filter((x) => x.status === 'in_use'))
+  status.value.idle = totalQuantity(all.filter((x) => x.status === 'idle'))
+  status.value.scrapped = totalQuantity(all.filter((x) => x.status === 'scrapped'))
   idleList.value = all.filter((x) => x.status === 'idle').map((x, i) => ({ ...x, key: i }))
 
   deptStats.value = depts.data.map((d) => ({
     name: d.name,
     it: it.data.filter((x) => x.department === d.name).length,
-    phone: phone.data.filter((x) => x.department === d.name).length,
+    phone: totalQuantity(phone.data.filter((x) => x.department === d.name)),
     medical: medical.data.filter((x) => x.department === d.name).length,
     number: numbers.data.filter((x) => x.department === d.name).length,
   }))

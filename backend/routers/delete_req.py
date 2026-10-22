@@ -24,9 +24,9 @@ from models import (
     TransferRecord,
     User,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from workflow import apply_transition, validate_transition
+from workflow import apply_transition, check_source_revision, validate_transition
 
 router = APIRouter(prefix="/api/delete-request", tags=["delete-request"])
 TABLE_MAP = {
@@ -65,6 +65,7 @@ def pending_request(item_id, db, user):
 
 
 class DeleteReqIn(BaseModel):
+    quantity: int = Field(default=1, ge=1, le=100000, strict=True)
     table_name: str
     record_id: int = 0
     record_desc: str
@@ -142,6 +143,7 @@ def create_request(
             current_user,
             values["target_user"],
             values["target_department_id"],
+            quantity=data.quantity,
         )
     else:
         if data.table_name not in TABLE_MAP:
@@ -154,6 +156,7 @@ def create_request(
         if getattr(record, "status", None) == "archived":
             raise HTTPException(409, "资产已移出档案，无需重复申请")
         check_scope(record, current_user)
+        values["quantity"] = getattr(record, "quantity", 1)
         for field in (
             "application_type",
             "target_user",
@@ -163,6 +166,7 @@ def create_request(
         ):
             values[field] = None
     values.update(
+        source_revision=getattr(record, "revision", None),
         applicant=current_user.name,
         applicant_id=current_user.id,
         department_id=record.department_id,
@@ -191,6 +195,7 @@ def approve_request(
         asset = db.get(model, item.asset_id) if model and item.asset_id else None
         if not asset or not item.application_type:
             raise HTTPException(409, "申请资产或旧申请内容无效，请重新提交")
+        check_source_revision(asset, item.source_revision)
         target = validate_transition(
             db,
             asset,
@@ -198,6 +203,7 @@ def approve_request(
             current_user,
             item.target_user,
             item.target_department_id,
+            quantity=item.quantity,
         )
         apply_transition(
             db,
@@ -208,6 +214,7 @@ def approve_request(
             item.target_user,
             target,
             "设备申请审批通过",
+            quantity=item.quantity,
         )
         if item.application_type == "scrap":
             db.add(
@@ -216,6 +223,7 @@ def approve_request(
                     asset_desc=item.record_desc,
                     asset_type=item.asset_type,
                     asset_id=item.asset_id,
+                    quantity=item.quantity,
                     applicant=item.applicant,
                     applicant_id=item.applicant_id,
                     department=asset.department,
@@ -234,6 +242,7 @@ def approve_request(
         if not record:
             raise HTTPException(404, "申请对应的记录已不存在")
         check_scope(record, current_user)
+        check_source_revision(record, item.source_revision)
         if item.table_name in ("it_assets", "phone_assets", "medical_assets", "phone_numbers"):
             record.status = "archived"  # preserve stable asset identity and audit history
         else:

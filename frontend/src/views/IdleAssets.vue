@@ -3,7 +3,7 @@
     <PageHeading title="空闲设备" description="查看可调配的闲置资产，安排后续使用。"></PageHeading>
     <div class="stats" style="margin-bottom: 20px">
       <div class="card">
-        <div class="num">{{ list.length }}</div>
+        <div class="num">{{ totalQuantity(list) }}</div>
         <div class="label">空闲总数</div>
       </div>
       <div class="card">
@@ -33,6 +33,7 @@
           <tr>
             <th>资产编号/号码</th>
             <th>名称/说明</th>
+            <th>数量</th>
             <th>类型</th>
             <th>当前部门</th>
             <th>状态</th>
@@ -43,6 +44,7 @@
           <tr v-for="item in list" :key="item.key">
             <td>{{ item.asset_number || item.number || item.wx_account }}</td>
             <td>{{ item.name || item.brand_model || item.keeper || item.wx_account || '—' }}</td>
+            <td>{{ assetQuantity(item) }}</td>
             <td>
               <span class="badge" :class="typeClass(item.type)">{{ item.type }}</span>
             </td>
@@ -65,6 +67,7 @@
   </div>
 </template>
 <script setup>
+import { assetQuantity, totalQuantity } from '../assetQuantity'
 import { hasMedicalAccess } from '../medicalAccess'
 const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
 import { currentUser } from '../userState'
@@ -96,7 +99,7 @@ onMounted(async () => {
   list.value = idle.map((x, i) => ({ ...x, key: i }))
   byType.value = {
     it: it.data.filter((x) => x.status === 'idle').length,
-    phone: phone.data.filter((x) => x.status === 'idle').length,
+    phone: totalQuantity(phone.data.filter((x) => x.status === 'idle')),
     medical: medical.data.filter((x) => x.status === 'idle').length,
     number: numbers.data.filter((x) => x.status === 'idle').length,
     wechat: wechat.data.filter((x) => x.status === 'idle').length,
