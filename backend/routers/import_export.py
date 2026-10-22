@@ -34,6 +34,7 @@ MODULES = {
         "fields": [
             ("资产编号", "asset_number", False),
             ("消防设备", "name", True),
+            ("位置", "location", False),
             ("购买时间", "purchase_date", False),
             ("到期时间", "expiry_date", False),
             ("部门", "department", False),

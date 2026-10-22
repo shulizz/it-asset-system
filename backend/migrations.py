@@ -26,6 +26,7 @@ def migrate_schema(engine):
                 "calibration_expiry DATE",
             ],
             "phone_numbers": ["department_id INTEGER"],
+            "fire_assets": ["location VARCHAR(200)"],
         }
         for table, columns in id_columns.items():
             existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}

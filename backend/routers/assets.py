@@ -571,6 +571,64 @@ def send_expiry_email(
 
 
 # ===== 消防设备（暂仅超级管理员） =====
+@router.get("/fire/notice-recipients")
+def fire_notice_recipients(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    from notifier import smtp_configured
+
+    users = (
+        db.query(User)
+        .filter(
+            User.role == "super_admin",
+            User.is_active == 1,
+            User.email.isnot(None),
+            User.email != "",
+        )
+        .order_by(User.id)
+        .all()
+    )
+    return {
+        "users": [{"id": u.id, "name": u.name, "email": u.email} for u in users],
+        "smtp_configured": smtp_configured(),
+    }
+
+
+@router.post("/fire/send-expiry-email")
+def send_fire_email(
+    data: ExpiryEmailIn,
+    days: int = 30,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    if not 1 <= days <= 365:
+        raise HTTPException(400, "提醒天数必须在1至365之间")
+    ids = set(data.recipient_user_ids)
+    users = (
+        db.query(User)
+        .filter(User.id.in_(ids), User.is_active == 1, User.email.isnot(None), User.email != "")
+        .all()
+    )
+    if len(users) != len(ids):
+        raise HTTPException(400, "所选用户已停用、被删除或未填写邮箱，请刷新收件人列表")
+    if any(user.role != "super_admin" for user in users):
+        raise HTTPException(403, "消防设备提醒暂时仅可发送给超级管理员")
+    from notifier import send_fire_expiry_notice
+
+    result = send_fire_expiry_notice(db, days, list(dict.fromkeys(u.email for u in users)))
+    db.add(
+        OperationLog(
+            user=current_user.name,
+            module="消防设备",
+            action="发送到期提醒",
+            detail=f"提醒设备 {result.get('count', 0)} 台，{result.get('message', '')}",
+        )
+    )
+    db.commit()
+    return result
+
+
 def validate_fire_dates(purchase_date, expiry_date):
     if purchase_date and expiry_date and expiry_date < purchase_date:
         raise ValueError("到期时间不能早于购买时间")
@@ -579,6 +637,7 @@ def validate_fire_dates(purchase_date, expiry_date):
 class FireAssetIn(BaseModel):
     asset_number: Optional[str] = None
     name: str = Field(min_length=1, max_length=100)
+    location: Optional[str] = Field(default=None, max_length=200)
     department: Optional[str] = None
     user_name: Optional[str] = None
     purchase_date: Optional[date] = None

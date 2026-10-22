@@ -2,12 +2,12 @@
 
 import os
 import smtplib
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape
 
-from models import MedicalAsset
+from models import FireAsset, MedicalAsset
 from sqlalchemy.orm import Session
 
 # ===== SMTP 配置（需要改成你自己的邮箱）=====
@@ -172,3 +172,51 @@ def send_expiry_notice(
     result = send_email(recipients or [], subject, html)
     result["count"] = len(expiring)
     return result
+
+
+def get_expiring_fire(db: Session, days: int = 30):
+    return (
+        db.query(FireAsset)
+        .filter(
+            FireAsset.expiry_date.isnot(None),
+            FireAsset.expiry_date <= date.today() + timedelta(days=days),
+            FireAsset.status.notin_(["scrapped", "archived"]),
+        )
+        .order_by(FireAsset.expiry_date, FireAsset.id)
+        .all()
+    )
+
+
+def send_fire_expiry_notice(db: Session, days: int, recipients: list) -> dict:
+    assets = get_expiring_fire(db, days)
+    if not assets:
+        return {
+            "success": True,
+            "message": f"近{days}天内无消防设备到期或逾期，无需发送",
+            "count": 0,
+        }
+    rows = []
+    for asset in assets:
+        days_left = (asset.expiry_date - date.today()).days
+        status = f"已到期 {-days_left} 天" if days_left < 0 else f"剩余 {days_left} 天"
+        values = [
+            asset.asset_number,
+            asset.name,
+            asset.location,
+            asset.department,
+            asset.purchase_date,
+            asset.expiry_date,
+            status,
+        ]
+        cells = "".join(
+            f'<td style="border:1px solid #ddd;padding:8px">{escape(str(value)) if value is not None else "—"}</td>'
+            for value in values
+        )
+        rows.append(f"<tr>{cells}</tr>")
+    headers = "".join(
+        f'<th style="border:1px solid #ddd;padding:8px">{label}</th>'
+        for label in ["资产编号", "消防设备", "位置", "部门", "购买时间", "到期时间", "到期状态"]
+    )
+    html = f'<h2>消防设备到期提醒</h2><p>以下设备将在{days}天内到期或已到期，请及时检查更换。</p><table style="border-collapse:collapse"><thead><tr>{headers}</tr></thead><tbody>{"".join(rows)}</tbody></table>'
+    result = send_email(recipients, f"【消防设备到期提醒】{len(assets)}台设备待处理", html)
+    return {**result, "count": len(assets)}

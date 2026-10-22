@@ -43,6 +43,134 @@ from sqlalchemy import create_engine, text
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_fire_location_round_trip_import_export_and_legacy_update(self):
+        item = self.create_fire_fixture()
+        response = self.client.put(
+            f"/api/assets/fire/{item['id']}",
+            headers=self.headers(1),
+            json={"name": item["name"], "location": "二楼消防通道"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        response = self.client.put(
+            f"/api/assets/fire/{item['id']}", headers=self.headers(1), json={"name": "更新名称"}
+        )
+        self.assertEqual(response.json()["location"], "二楼消防通道")
+        exported = self.client.get("/api/ie/fire/export", headers=self.headers(1))
+        book = openpyxl.load_workbook(BytesIO(exported.content))
+        rows = list(book.active.values)
+        self.assertEqual(rows[1][rows[0].index("位置")], "二楼消防通道")
+        wb = openpyxl.Workbook()
+        wb.active.append(["消防设备", "位置"])
+        wb.active.append(["消防栓", "三楼东侧"])
+        buf = BytesIO()
+        wb.save(buf)
+        response = self.client.post(
+            "/api/ie/fire/import",
+            headers=self.headers(1),
+            files={"file": ("fire.xlsx", buf.getvalue())},
+        )
+        self.assertEqual(response.json()["imported"], 1, response.text)
+        records = self.client.get("/api/assets/fire", headers=self.headers(1)).json()
+        self.assertIn("三楼东侧", [row["location"] for row in records])
+
+    def test_fire_email_authorization_selection_dates_and_escaping(self):
+        from models import FireAsset
+
+        item = self.create_fire_fixture()
+        with SessionLocal() as db:
+            db.get(User, 1).email = "admin@example.com"
+            db.get(User, 3).email = "ordinary@example.com"
+            asset = db.get(FireAsset, item["id"])
+            asset.expiry_date = date.today() + timedelta(days=10)
+            asset.location = '<img src=x onerror="test">'
+            db.add(
+                FireAsset(
+                    asset_number="NOT-DUE",
+                    name="未到期",
+                    status="in_use",
+                    expiry_date=date.today() + timedelta(days=31),
+                )
+            )
+            db.add(
+                FireAsset(
+                    asset_number="SCRAPPED-FIRE",
+                    name="已报废",
+                    status="scrapped",
+                    expiry_date=date.today() - timedelta(days=1),
+                )
+            )
+            db.commit()
+        with patch("notifier.smtp_configured", return_value=True):
+            recipients = self.client.get(
+                "/api/assets/fire/notice-recipients", headers=self.headers(1)
+            )
+            self.assertEqual([u["id"] for u in recipients.json()["users"]], [1])
+        with patch(
+            "notifier.send_email", return_value={"success": True, "message": "测试已发送"}
+        ) as send:
+            payload = {"recipient_user_ids": [1, 1]}
+            self.assertEqual(
+                self.client.post(
+                    "/api/assets/fire/send-expiry-email", headers=self.headers(3), json=payload
+                ).status_code,
+                403,
+            )
+            self.assertEqual(
+                self.client.get(
+                    "/api/assets/fire/notice-recipients", headers=self.headers(3)
+                ).status_code,
+                403,
+            )
+            self.assertEqual(
+                self.client.post(
+                    "/api/assets/fire/send-expiry-email",
+                    headers=self.headers(1),
+                    json={"recipient_user_ids": [3]},
+                ).status_code,
+                403,
+            )
+            self.assertEqual(
+                self.client.post(
+                    "/api/assets/fire/send-expiry-email",
+                    headers=self.headers(1),
+                    json={"recipient_user_ids": [999]},
+                ).status_code,
+                400,
+            )
+            self.assertEqual(
+                self.client.post(
+                    "/api/assets/fire/send-expiry-email?days=0",
+                    headers=self.headers(1),
+                    json=payload,
+                ).status_code,
+                400,
+            )
+            send.assert_not_called()
+            response = self.client.post(
+                "/api/assets/fire/send-expiry-email?days=30", headers=self.headers(1), json=payload
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["count"], 1)
+            args = send.call_args.args
+            self.assertEqual(args[0], ["admin@example.com"])
+            self.assertIn("消防设备到期提醒", args[1])
+            self.assertIn("&lt;img", args[2])
+            self.assertNotIn("<img", args[2])
+            self.assertIn("位置", args[2])
+            self.assertNotIn("NOT-DUE", args[2])
+            self.assertNotIn("SCRAPPED-FIRE", args[2])
+        with SessionLocal() as db:
+            db.get(FireAsset, item["id"]).expiry_date = date.today() + timedelta(days=60)
+            db.commit()
+        with patch("notifier.send_email") as send:
+            response = self.client.post(
+                "/api/assets/fire/send-expiry-email",
+                headers=self.headers(1),
+                json={"recipient_user_ids": [1]},
+            )
+            self.assertEqual(response.json()["count"], 0)
+            send.assert_not_called()
+
     def create_fire_fixture(self):
         response = self.client.post(
             "/api/assets/fire",

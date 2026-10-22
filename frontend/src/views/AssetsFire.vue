@@ -5,6 +5,7 @@
       description="登记消防设备、购买时间和到期时间，及时跟进设备更换。"
     >
       <div class="fire-actions">
+        <ExpiryEmailDialog module="fire" />
         <ImportExportButtons module="fire" /><button class="btn-primary" @click="openForm">
           + 新增消防设备
         </button>
@@ -12,7 +13,11 @@
     </PageHeading>
     <p class="fire-notice">已到期 {{ overdue }} 台 · 30 天内到期 {{ upcoming }} 台</p>
     <div class="filter-bar">
-      <input aria-label="搜索消防设备" v-model="keyword" placeholder="搜索编号、消防设备或部门" />
+      <input
+        aria-label="搜索消防设备"
+        v-model="keyword"
+        placeholder="搜索编号、消防设备、位置或部门"
+      />
       <select aria-label="到期筛选" v-model="expiryFilter">
         <option value="">全部到期状态</option>
         <option value="overdue">已到期</option>
@@ -26,6 +31,7 @@
           <tr>
             <th>资产编号</th>
             <th>消防设备</th>
+            <th>位置</th>
             <th>购买时间</th>
             <th>到期时间</th>
             <th>到期状态</th>
@@ -38,6 +44,7 @@
           <tr v-for="item in filtered" :key="item.id">
             <td>{{ item.asset_number }}</td>
             <td>{{ item.name }}</td>
+            <td>{{ item.location || '—' }}</td>
             <td>{{ item.purchase_date || '—' }}</td>
             <td>{{ item.expiry_date || '—' }}</td>
             <td>
@@ -71,6 +78,15 @@
         <div class="form-row">
           <label for="fire-purchased">购买时间</label
           ><input id="fire-purchased" type="date" v-model="form.purchase_date" />
+        </div>
+        <div class="form-row">
+          <label for="fire-location">位置</label
+          ><input
+            id="fire-location"
+            v-model="form.location"
+            maxlength="200"
+            placeholder="如：一楼大厅东侧、二楼消防通道"
+          />
         </div>
         <div class="form-row">
           <label for="fire-expiry">到期时间</label
@@ -121,6 +137,7 @@ import PageHeading from '../components/PageHeading.vue'
 import TableFrame from '../components/TableFrame.vue'
 import ImportExportButtons from '../components/ImportExportButtons.vue'
 import DeleteRequestDialog from '../components/DeleteRequestDialog.vue'
+import ExpiryEmailDialog from '../components/ExpiryEmailDialog.vue'
 const list = ref([]),
   departments = ref([]),
   keyword = ref(''),
@@ -132,6 +149,7 @@ const list = ref([]),
   deleteTarget = ref(null)
 const blank = () => ({
   name: '',
+  location: '',
   purchase_date: '',
   expiry_date: '',
   department: '',
@@ -154,7 +172,7 @@ const filtered = computed(() =>
   list.value.filter((x) => {
     if (
       keyword.value &&
-      !`${x.asset_number} ${x.name} ${x.department || ''}`
+      !`${x.asset_number} ${x.name} ${x.location || ''} ${x.department || ''}`
         .toLowerCase()
         .includes(keyword.value.toLowerCase())
     )

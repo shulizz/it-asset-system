@@ -112,6 +112,7 @@ class FireAsset(Base):
     id = Column(Integer, primary_key=True, index=True)
     asset_number = Column(String(50), unique=True, index=True, nullable=False)
     name = Column(String(100), nullable=False)
+    location = Column(String(200))
     department = Column(String(50))
     department_id = Column(Integer, ForeignKey("departments.id"), index=True)
     user_name = Column(String(50))

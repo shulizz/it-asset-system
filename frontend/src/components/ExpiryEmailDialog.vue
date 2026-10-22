@@ -15,9 +15,11 @@
         </h3>
         <p class="hint">
           {{
-            reminderType === 'calibration'
-              ? '发送医疗设备30天内校准到期及校准已逾期的提醒。'
-              : '发送医疗设备30天内到期及已过期的提醒。'
+            module === 'fire'
+              ? '发送消防设备30天内到期及已到期的提醒。消防信息当前仅限超级管理员，收件人也仅限启用且填写邮箱的超级管理员。'
+              : reminderType === 'calibration'
+                ? '发送医疗设备30天内校准到期及校准已逾期的提醒。'
+                : '发送医疗设备30天内到期及已过期的提醒。'
           }}邮箱来自“用户权限”中保存的用户资料。
         </p>
         <p v-if="loading">正在加载收件人…</p>
@@ -59,7 +61,10 @@
 <script setup>
 import { ref } from 'vue'
 import api from '../api'
-const props = defineProps({ reminderType: { type: String, default: 'expiry' } })
+const props = defineProps({
+  reminderType: { type: String, default: 'expiry' },
+  module: { type: String, default: 'medical' },
+})
 const visible = ref(false),
   loading = ref(false),
   sending = ref(false),
@@ -80,7 +85,7 @@ async function open() {
   configured.value = false
   success.value = false
   try {
-    const { data } = await api.get('/assets/medical/notice-recipients')
+    const { data } = await api.get(`/assets/${props.module}/notice-recipients`)
     recipients.value = data.users
     configured.value = data.smtp_configured
   } catch (e) {
@@ -98,7 +103,7 @@ async function send() {
   message.value = ''
   try {
     const { data } = await api.post(
-      '/assets/medical/send-expiry-email?days=30' +
+      `/assets/${props.module}/send-expiry-email?days=30` +
         (props.reminderType === 'calibration' ? '&reminder_type=calibration' : ''),
       { recipient_user_ids: selected.value },
     )
