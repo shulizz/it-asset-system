@@ -10,6 +10,10 @@
     /></PageHeading>
     <p v-if="loadError" style="color: #b45309">{{ loadError }}</p>
     <div class="stats">
+      <div v-if="canViewFire" class="card">
+        <div class="num">{{ total.fire || 0 }}</div>
+        <div class="label">消防设备</div>
+      </div>
       <div class="card">
         <div class="num">{{ total.it }}</div>
         <div class="label">IT设备</div>
@@ -55,6 +59,7 @@
         ><table>
           <thead>
             <tr>
+              <th v-if="canViewFire">消防设备</th>
               <th>部门</th>
               <th>IT设备</th>
               <th>手机</th>
@@ -64,6 +69,7 @@
           </thead>
           <tbody>
             <tr v-for="d in deptStats" :key="d.name">
+              <td v-if="canViewFire">{{ d.fire }}</td>
               <td>{{ d.name }}</td>
               <td>{{ d.it }}</td>
               <td>{{ d.phone }}</td>
@@ -97,6 +103,8 @@
   </div>
 </template>
 <script setup>
+import { hasFireAccess } from '../fireAccess'
+const canViewFire = computed(() => hasFireAccess(currentUser.value))
 import { assetQuantity, totalQuantity } from '../assetQuantity'
 import { hasMedicalAccess } from '../medicalAccess'
 import { hasWeChatRead } from '../wechatAccess'
@@ -141,7 +149,7 @@ onMounted(async () => {
     }
   }
   const canWechat = hasWeChatRead(currentUser.value)
-  const [it, phone, medical, numbers, depts, wc] = await Promise.all([
+  const [it, phone, medical, numbers, depts, wc, fire] = await Promise.all([
     fetchModule('/assets/it', 'IT设备'),
     fetchModule('/assets/phone', '手机'),
     canViewMedical.value
@@ -150,11 +158,13 @@ onMounted(async () => {
     fetchModule('/assets/numbers', '电话号码'),
     fetchModule('/departments', '部门'),
     canWechat ? fetchModule('/wechat', '微信账号') : Promise.resolve({ data: [] }),
+    canViewFire.value ? fetchModule('/assets/fire', '消防设备') : Promise.resolve({ data: [] }),
   ])
   if (errors.length) loadError.value = `${errors.join('、')}加载失败，相关统计不完整，请刷新重试`
   total.value = {
     it: it.data.length,
     phone: totalQuantity(phone.data),
+    fire: fire.data.length,
     medical: medical.data.length,
     number: numbers.data.length,
     wechat: canWechat ? wc.data.filter((x) => x.wx_account).length : '无权限',
@@ -162,6 +172,7 @@ onMounted(async () => {
   deptCount.value = depts.data.length
 
   const all = [
+    ...fire.data.map((x) => ({ ...x, type: '消防设备' })),
     ...it.data.map((x) => ({ ...x, type: 'IT设备' })),
     ...phone.data.map((x) => ({ ...x, type: '手机' })),
     ...medical.data.map((x) => ({ ...x, type: '医疗' })),
@@ -173,6 +184,7 @@ onMounted(async () => {
 
   deptStats.value = depts.data.map((d) => ({
     name: d.name,
+    fire: fire.data.filter((x) => x.department === d.name).length,
     it: it.data.filter((x) => x.department === d.name).length,
     phone: totalQuantity(phone.data.filter((x) => x.department === d.name)),
     medical: medical.data.filter((x) => x.department === d.name).length,

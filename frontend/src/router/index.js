@@ -5,6 +5,8 @@ import Login from '../views/Login.vue'
 import AccountPassword from '../views/AccountPassword.vue'
 import Layout from '../views/Layout.vue'
 import Dashboard from '../views/Dashboard.vue'
+import AssetsFire from '../views/AssetsFire.vue'
+import { hasFireAccess } from '../fireAccess'
 import AssetsIT from '../views/AssetsIT.vue'
 import AssetsPhone from '../views/AssetsPhone.vue'
 import AssetsMedical from '../views/AssetsMedical.vue'
@@ -30,6 +32,7 @@ const routes = [
     children: [
       { path: 'dashboard', component: Dashboard },
       { path: 'account-password', component: AccountPassword },
+      { path: 'assets-fire', component: AssetsFire },
       { path: 'assets-it', component: AssetsIT },
       { path: 'assets-phone', component: AssetsPhone },
       { path: 'assets-medical', component: AssetsMedical },
@@ -58,6 +61,7 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   if (to.path !== '/login' && !token) next('/login')
+  else if (to.path === '/assets-fire' && !hasFireAccess(currentUser.value)) next('/dashboard')
   else if (to.path === '/assets-medical' && !hasMedicalAccess(currentUser.value)) next('/dashboard')
   else next()
 })

@@ -1,6 +1,10 @@
 <template>
   <div>
     <PageHeading title="报废设备" description="查阅已报废设备，保留历史资产信息。"></PageHeading>
+    <div v-if="canViewFire" class="card" style="margin-bottom: 16px">
+      <div class="num">{{ byType.fire || 0 }}</div>
+      <div class="label">消防设备</div>
+    </div>
     <div class="stats" style="margin-bottom: 20px">
       <div class="card">
         <div class="num" style="color: #dc2626">{{ totalQuantity(list) }}</div>
@@ -48,6 +52,8 @@
   </div>
 </template>
 <script setup>
+import { hasFireAccess } from '../fireAccess'
+const canViewFire = computed(() => hasFireAccess(currentUser.value))
 import { assetQuantity, totalQuantity } from '../assetQuantity'
 import { hasMedicalAccess } from '../medicalAccess'
 const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
@@ -59,18 +65,23 @@ import api from '../api'
 const list = ref([])
 const byType = ref({ it: 0, phone: 0, medical: 0 })
 onMounted(async () => {
-  const [it, phone, medical] = await Promise.all([
+  const [it, phone, medical, fire] = await Promise.all([
     api.get('/assets/it'),
     api.get('/assets/phone'),
     canViewMedical.value ? api.get('/assets/medical') : Promise.resolve({ data: [] }),
+    canViewFire.value
+      ? api.get('/assets/fire').catch(() => ({ data: [] }))
+      : Promise.resolve({ data: [] }),
   ])
   const sc = [
+    ...fire.data.filter((x) => x.status === 'scrapped').map((x) => ({ ...x, type: '消防设备' })),
     ...it.data.filter((x) => x.status === 'scrapped').map((x) => ({ ...x, type: 'IT设备' })),
     ...phone.data.filter((x) => x.status === 'scrapped').map((x) => ({ ...x, type: '手机' })),
     ...medical.data.filter((x) => x.status === 'scrapped').map((x) => ({ ...x, type: '医疗' })),
   ]
   list.value = sc.map((x, i) => ({ ...x, key: i }))
   byType.value = {
+    fire: fire.data.filter((x) => x.status === 'scrapped').length,
     it: it.data.filter((x) => x.status === 'scrapped').length,
     phone: totalQuantity(phone.data.filter((x) => x.status === 'scrapped')),
     medical: medical.data.filter((x) => x.status === 'scrapped').length,

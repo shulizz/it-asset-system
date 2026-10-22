@@ -43,6 +43,174 @@ from sqlalchemy import create_engine, text
 
 
 class WorkflowTests(unittest.TestCase):
+    def create_fire_fixture(self):
+        response = self.client.post(
+            "/api/assets/fire",
+            headers=self.headers(1),
+            json={
+                "name": "干粉灭火器",
+                "department": "甲部门",
+                "purchase_date": "2026-01-01",
+                "expiry_date": "2028-01-01",
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()
+
+    def test_fire_admin_dates_export_and_department_integrity(self):
+        item = self.create_fire_fixture()
+        self.assertTrue(item["asset_number"].startswith("FIRE-"))
+        self.assertEqual(item["status"], "in_use")
+        self.assertEqual(item["purchase_date"], "2026-01-01")
+        response = self.client.put(
+            f"/api/assets/fire/{item['id']}",
+            headers=self.headers(1),
+            json={"name": "更新灭火器", "purchase_date": "2029-01-01"},
+        )
+        self.assertEqual(response.status_code, 400, response.text)
+        invalid = self.client.post(
+            "/api/assets/fire",
+            headers=self.headers(1),
+            json={"name": "灭火器", "purchase_date": "2026-02-01", "expiry_date": "2025-01-01"},
+        )
+        self.assertEqual(invalid.status_code, 422)
+        response = self.client.get("/api/ie/fire/export", headers=self.headers(1))
+        book = openpyxl.load_workbook(BytesIO(response.content))
+        self.assertTrue({"消防设备", "购买时间", "到期时间"}.issubset(next(book.active.values)))
+        report = self.client.get("/api/reports/export", headers=self.headers(1))
+        book = openpyxl.load_workbook(BytesIO(report.content))
+        self.assertIn("消防设备", book.sheetnames)
+        renamed = self.client.put(
+            "/api/departments/1", headers=self.headers(1), json={"name": "新部门"}
+        )
+        self.assertEqual(renamed.status_code, 200)
+        row = self.client.get("/api/assets/fire", headers=self.headers(1)).json()[0]
+        self.assertEqual(row["department"], "新部门")
+
+    def test_fire_ordinary_user_cannot_access_even_with_broad_existing_grants(self):
+        item = self.create_fire_fixture()
+        from permissions import PERMISSION_KEYS
+
+        with SessionLocal() as db:
+            user = db.get(User, 3)
+            user.permissions = json.dumps(sorted(PERMISSION_KEYS))
+            user.role = "管理员"
+            user.data_scope = "all"
+            db.commit()
+        headers = self.headers(3)
+        for path in ["/api/assets/fire", "/api/ie/fire/template", "/api/ie/fire/export"]:
+            self.assertEqual(self.client.get(path, headers=headers).status_code, 403, path)
+        self.assertEqual(
+            self.client.post(
+                "/api/assets/fire", headers=headers, json={"name": "禁止新增"}
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.put(
+                f"/api/assets/fire/{item['id']}", headers=headers, json={"name": "禁止修改"}
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/scrap",
+                headers=headers,
+                json={"asset_type": "fire", "asset_id": item["id"], "asset_desc": "禁止报废"},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/delete-request",
+                headers=headers,
+                json={
+                    "table_name": "fire_assets",
+                    "record_id": item["id"],
+                    "record_desc": "禁止删除",
+                    "reason": "test",
+                },
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/transfer",
+                headers=headers,
+                json={
+                    "asset_type": "fire",
+                    "asset_id": item["id"],
+                    "asset_desc": "禁止调拨",
+                    "transfer_number": "x",
+                    "type": "transfer",
+                    "new_user": "某人",
+                },
+            ).status_code,
+            403,
+        )
+        report = self.client.get("/api/reports/export", headers=headers)
+        book = openpyxl.load_workbook(BytesIO(report.content))
+        self.assertNotIn("消防设备", book.sheetnames)
+        self.assertNotIn("消防设备", next(book["部门统计"].values))
+        self.assertEqual(self.client.get("/api/logs", headers=headers).json(), [])
+        self.assertIn(self.client.get("/api/assets/fire").status_code, (401, 403))
+
+    def test_fire_import_and_hidden_workflow_records(self):
+        wb = openpyxl.Workbook()
+        wb.active.append(["消防设备", "购买时间", "到期时间", "部门"])
+        wb.active.append(["灭火器", "2026-01-01", "2028-01-01", "甲部门"])
+        wb.active.append(["错误日期", "2026-01-01", "2025-01-01", "甲部门"])
+        buf = BytesIO()
+        wb.save(buf)
+        upload = {
+            "file": (
+                "fire.xlsx",
+                buf.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        }
+        self.assertEqual(
+            self.client.post(
+                "/api/ie/fire/import", headers=self.headers(3), files=upload
+            ).status_code,
+            403,
+        )
+        result = self.client.post("/api/ie/fire/import", headers=self.headers(1), files=upload)
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual((result.json()["imported"], result.json()["skipped"]), (1, 1))
+        asset = self.client.get("/api/assets/fire", headers=self.headers(1)).json()[0]
+        scrap = self.client.post(
+            "/api/scrap",
+            headers=self.headers(1),
+            json={"asset_type": "fire", "asset_id": asset["id"], "asset_desc": "test"},
+        )
+        self.assertEqual(scrap.status_code, 200, scrap.text)
+        self.assertEqual(self.client.get("/api/scrap", headers=self.headers(3)).json(), [])
+        self.assertEqual(
+            self.client.put(
+                f"/api/scrap/{scrap.json()['id']}/reject", headers=self.headers(3)
+            ).status_code,
+            403,
+        )
+        delete = self.client.post(
+            "/api/delete-request",
+            headers=self.headers(1),
+            json={
+                "table_name": "fire_assets",
+                "record_id": asset["id"],
+                "record_desc": "test",
+                "reason": "test",
+            },
+        )
+        self.assertEqual(delete.status_code, 200, delete.text)
+        self.assertEqual(self.client.get("/api/delete-request", headers=self.headers(3)).json(), [])
+        self.assertEqual(
+            self.client.put(
+                f"/api/delete-request/{delete.json()['id']}/approve", headers=self.headers(3)
+            ).status_code,
+            403,
+        )
+
     def test_phone_quantity_additive_migration_preserves_legacy_rows(self):
         from migrations import migrate_schema
 

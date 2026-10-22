@@ -1,7 +1,7 @@
 from datetime import date
 
 from database import get_db
-from deps import can_view_medical, get_user_permissions, require_perm, scope_query
+from deps import can_view_fire, can_view_medical, get_user_permissions, require_perm, scope_query
 from excel_output import append_text_row, export_workbook, workbook_response
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -18,6 +18,8 @@ def export_report(db: Session = Depends(get_db), user=Depends(require_perm("repo
         raise HTTPException(403, "没有导出权限")
     with export_workbook() as wb:
         modules = ["it", "phone"]
+        if can_view_fire(user):
+            modules.append("fire")
         if can_view_medical(user):
             modules.append("medical")
         modules.append("number")
@@ -48,7 +50,7 @@ def export_report(db: Session = Depends(get_db), user=Depends(require_perm("repo
                 if module != "wechat":
                     key = row[department_index] or "未分配部门"
                     distribution.setdefault(
-                        key, dict.fromkeys(["it", "phone", "medical", "number"], 0)
+                        key, dict.fromkeys(["it", "phone", "fire", "medical", "number"], 0)
                     )[module] += (
                         row[
                             next(

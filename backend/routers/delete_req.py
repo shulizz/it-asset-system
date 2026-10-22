@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import (
     DeleteRequest,
     Department,
+    FireAsset,
     ITAsset,
     MedicalAsset,
     OperationLog,
@@ -30,6 +31,7 @@ from workflow import apply_transition, check_source_revision, validate_transitio
 
 router = APIRouter(prefix="/api/delete-request", tags=["delete-request"])
 TABLE_MAP = {
+    "fire_assets": FireAsset,
     "it_assets": ITAsset,
     "phone_assets": PhoneAsset,
     "medical_assets": MedicalAsset,
@@ -37,7 +39,7 @@ TABLE_MAP = {
     "scrap_requests": ScrapRequest,
     "transfer_records": TransferRecord,
 }
-ASSET_MAP = {"it": ITAsset, "phone": PhoneAsset, "medical": MedicalAsset}
+ASSET_MAP = {"fire": FireAsset, "it": ITAsset, "phone": PhoneAsset, "medical": MedicalAsset}
 
 
 def request_in_scope(item, user, db):
@@ -165,6 +167,8 @@ def create_request(
             "asset_id",
         ):
             values[field] = None
+    if getattr(record, "asset_type", None) == "fire" and data.table_name != "apply_requests":
+        values["asset_type"] = "fire"
     values.update(
         source_revision=getattr(record, "revision", None),
         applicant=current_user.name,
@@ -243,7 +247,13 @@ def approve_request(
             raise HTTPException(404, "申请对应的记录已不存在")
         check_scope(record, current_user)
         check_source_revision(record, item.source_revision)
-        if item.table_name in ("it_assets", "phone_assets", "medical_assets", "phone_numbers"):
+        if item.table_name in (
+            "it_assets",
+            "phone_assets",
+            "medical_assets",
+            "phone_numbers",
+            "fire_assets",
+        ):
             record.status = "archived"  # preserve stable asset identity and audit history
         else:
             db.delete(record)

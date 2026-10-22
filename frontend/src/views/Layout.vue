@@ -30,6 +30,9 @@
         >
           <div class="nav-group-title">资产档案</div>
           <router-link to="/assets-it" class="nav-item"><AppIcon name="it" />IT 设备</router-link>
+          <router-link v-if="hasFireAccess(user)" to="/assets-fire" class="nav-item"
+            ><AppIcon name="fire" />消防设备</router-link
+          >
           <router-link to="/assets-phone" class="nav-item"
             ><AppIcon name="phone" />手机设备</router-link
           >
@@ -152,6 +155,7 @@
 </template>
 
 <script setup>
+import { hasFireAccess } from '../fireAccess'
 import { hasMedicalAccess } from '../medicalAccess'
 import { hasWeChatRead } from '../wechatAccess'
 const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
@@ -164,6 +168,7 @@ const route = useRoute()
 const pageNames = {
   dashboard: '工作台',
   'account-password': '修改密码',
+  'assets-fire': '消防设备',
   'assets-it': 'IT 设备档案',
   'assets-phone': '手机设备档案',
   'assets-medical': '医疗设备档案',

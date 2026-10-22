@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import (
     DeleteRequest,
     Department,
+    FireAsset,
     ITAsset,
     MedicalAsset,
     OperationLog,
@@ -75,6 +76,7 @@ def update_dept(
     for model in [
         User,
         ITAsset,
+        FireAsset,
         PhoneAsset,
         MedicalAsset,
         PhoneNumber,
@@ -113,6 +115,7 @@ def delete_dept(
     for model in [
         User,
         ITAsset,
+        FireAsset,
         PhoneAsset,
         MedicalAsset,
         PhoneNumber,

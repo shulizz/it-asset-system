@@ -64,6 +64,7 @@
             <option value="">-- 请选择 --</option>
             <option value="it">IT设备</option>
             <option value="phone">手机设备</option>
+            <option v-if="canViewFire" value="fire">消防设备</option>
             <option v-if="canViewMedical" value="medical">医疗设备</option>
             <option value="number">电话号码</option>
           </select>
@@ -109,6 +110,8 @@
   </div>
 </template>
 <script setup>
+import { hasFireAccess } from '../fireAccess'
+const canViewFire = computed(() => hasFireAccess(currentUser.value))
 import { hasMedicalAccess } from '../medicalAccess'
 const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
 import PageHeading from '../components/PageHeading.vue'
@@ -178,6 +181,7 @@ async function onTypeChange() {
   const type = form.value.assetType
   if (!type) return
   const map = {
+    fire: '/assets/fire',
     it: '/assets/it',
     phone: '/assets/phone',
     medical: '/assets/medical',

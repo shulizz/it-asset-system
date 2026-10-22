@@ -61,6 +61,12 @@
         <p>各模块数量</p>
       </div>
       <div class="module-grid">
+        <div v-if="canViewFire" class="mini-stat">
+          <AppIcon name="fire" />
+          <div>
+            <span class="label-sm">消防设备</span><strong>{{ fireCount }}</strong>
+          </div>
+        </div>
         <div class="mini-stat">
           <AppIcon name="phone" />
           <div>
@@ -226,6 +232,8 @@
 </template>
 
 <script setup>
+import { hasFireAccess } from '../fireAccess'
+const canViewFire = computed(() => hasFireAccess(currentUser.value))
 import { assetQuantity, totalQuantity } from '../assetQuantity'
 import { hasMedicalAccess } from '../medicalAccess'
 const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
@@ -253,6 +261,7 @@ const dataError = ref(false)
 const stats = ref({ total: 0, inUse: 0, idle: 0 })
 const pendingList = ref([])
 const transferList = ref([])
+const fireCount = ref(0)
 const phoneCount = ref(0)
 const medicalCount = ref(0)
 const numberCount = ref(0)
@@ -262,6 +271,7 @@ const pendingCount = ref(0)
 const expiringList = ref([])
 const calibrationList = ref([])
 async function safeGet(url) {
+  if (url === '/assets/fire' && !canViewFire.value) return []
   if (url === '/assets/medical' && !canViewMedical.value) return []
   try {
     const r = await api.get(url)
@@ -273,7 +283,7 @@ async function safeGet(url) {
 }
 
 onMounted(async () => {
-  const [it, ph, med, del, tr, num, dept, scrap, wc] = await Promise.all(
+  const [it, ph, med, del, tr, num, dept, scrap, wc, fire] = await Promise.all(
     [
       '/assets/it',
       '/assets/phone',
@@ -284,13 +294,14 @@ onMounted(async () => {
       '/departments',
       '/scrap',
       '/wechat',
+      '/assets/fire',
     ].map(safeGet),
   )
   calibrationList.value = dueMedical(med, 'calibration_expiry', 10)
 
   // 全部资产类型纳入统计：IT设备、手机、医疗、电话号码、微信
   const totals = { total: 0, inUse: 0, idle: 0 }
-  for (const assets of [it, ph, med, num, wc]) {
+  for (const assets of [it, ph, med, num, wc, fire]) {
     totals.total += totalQuantity(assets)
     for (const item of assets) {
       if (item.status === 'in_use') totals.inUse += assetQuantity(item)
@@ -326,6 +337,7 @@ onMounted(async () => {
   pendingCount.value = count
 
   transferList.value = tr.slice(0, 5)
+  fireCount.value = fire.length
   phoneCount.value = totalQuantity(ph)
   medicalCount.value = med.length
   numberCount.value = num.length

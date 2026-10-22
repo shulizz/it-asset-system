@@ -24,6 +24,7 @@ function component(file, context, bindings) {
     context.currentUser.value = (await context.api.get('/auth/me')).data
   }
   context.hasMedicalAccess ||= () => true
+  context.hasFireAccess = (user) => user.role === 'super_admin'
   vm.createContext(context)
   vm.runInContext(
     fs.readFileSync(path.join(root, 'assetQuantity.js'), 'utf8').replace(/^export /gm, ''),

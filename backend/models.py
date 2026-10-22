@@ -106,6 +106,21 @@ class MedicalAsset(Base):
     notes = Column(Text)
 
 
+# ===== 消防设备 =====
+class FireAsset(Base):
+    __tablename__ = "fire_assets"
+    id = Column(Integer, primary_key=True, index=True)
+    asset_number = Column(String(50), unique=True, index=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    department = Column(String(50))
+    department_id = Column(Integer, ForeignKey("departments.id"), index=True)
+    user_name = Column(String(50))
+    purchase_date = Column(Date)
+    expiry_date = Column(Date)
+    status = Column(String(20), default="in_use")
+    notes = Column(Text)
+
+
 # ===== 电话号码 =====
 class PhoneNumber(Base):
     __tablename__ = "phone_numbers"

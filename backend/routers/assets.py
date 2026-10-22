@@ -8,11 +8,21 @@ from deps import (
     require_any,
     require_medical_view,
     require_perm,
+    require_super_admin,
     scope_query,
 )
 from fastapi import APIRouter, Depends, HTTPException
 from medical_dates import validate_calibration_dates
-from models import Department, ITAsset, MedicalAsset, OperationLog, PhoneAsset, PhoneNumber, User
+from models import (
+    Department,
+    FireAsset,
+    ITAsset,
+    MedicalAsset,
+    OperationLog,
+    PhoneAsset,
+    PhoneNumber,
+    User,
+)
 from numbering import next_asset_number
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
@@ -67,8 +77,12 @@ def update_asset_fields(db, item, data, user, user_field):
     requested_status = values.get("status", item.status)
     values["status"] = (
         requested_status
-        if isinstance(item, PhoneNumber) and requested_status in ("cancelled", "unused")
-        else ("in_use" if final_user else "idle")
+        if isinstance(item, FireAsset)
+        else (
+            requested_status
+            if isinstance(item, PhoneNumber) and requested_status in ("cancelled", "unused")
+            else ("in_use" if final_user else "idle")
+        )
     )
     for key, value in values.items():
         setattr(item, key, value)
@@ -554,3 +568,96 @@ def send_expiry_email(
     )
     db.commit()
     return result
+
+
+# ===== 消防设备（暂仅超级管理员） =====
+def validate_fire_dates(purchase_date, expiry_date):
+    if purchase_date and expiry_date and expiry_date < purchase_date:
+        raise ValueError("到期时间不能早于购买时间")
+
+
+class FireAssetIn(BaseModel):
+    asset_number: Optional[str] = None
+    name: str = Field(min_length=1, max_length=100)
+    department: Optional[str] = None
+    user_name: Optional[str] = None
+    purchase_date: Optional[date] = None
+    expiry_date: Optional[date] = None
+    status: Literal["in_use", "idle"] = "in_use"
+    notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def valid_fields(self):
+        self.name = self.name.strip()
+        if not self.name:
+            raise ValueError("请填写消防设备名称")
+        validate_fire_dates(self.purchase_date, self.expiry_date)
+        return self
+
+
+@router.get("/fire")
+def list_fire(db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)):
+    return scope_query(db.query(FireAsset), FireAsset, current_user).all()
+
+
+@router.post("/fire")
+def create_fire(
+    data: FireAssetIn,
+    db: Session = Depends(get_write_db),
+    current_user: User = Depends(require_super_admin),
+):
+    number = data.asset_number or next_asset_number(db, FireAsset, "FIRE")
+    if db.query(FireAsset).filter(FireAsset.asset_number == number).first():
+        raise HTTPException(409, "资产编号已存在")
+    item = FireAsset(**{**data.model_dump(), "asset_number": number})
+    sync_department_id(db, item)
+    check_scope(item, current_user)
+    db.add(item)
+    db.add(
+        OperationLog(
+            user=current_user.name,
+            module="消防设备",
+            action="新增",
+            detail=f"新增消防设备 {number}",
+        )
+    )
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.put("/fire/{item_id}")
+def update_fire(
+    item_id: int,
+    data: FireAssetIn,
+    db: Session = Depends(get_write_db),
+    current_user: User = Depends(require_super_admin),
+):
+    item = (
+        scope_query(db.query(FireAsset), FireAsset, current_user)
+        .filter(FireAsset.id == item_id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(404, "消防设备不存在")
+    if item.status == "scrapped":
+        raise HTTPException(400, "已报废设备不能直接编辑")
+    try:
+        validate_fire_dates(
+            data.purchase_date if "purchase_date" in data.model_fields_set else item.purchase_date,
+            data.expiry_date if "expiry_date" in data.model_fields_set else item.expiry_date,
+        )
+    except ValueError as error:
+        raise HTTPException(400, str(error))
+    update_asset_fields(db, item, data, current_user, "user_name")
+    db.add(
+        OperationLog(
+            user=current_user.name,
+            module="消防设备",
+            action="编辑",
+            detail=f"编辑消防设备 {item.asset_number}",
+        )
+    )
+    db.commit()
+    db.refresh(item)
+    return item

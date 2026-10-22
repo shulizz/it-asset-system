@@ -6,6 +6,7 @@ from deps import require_perm, scope_query
 from fastapi import APIRouter, Depends, HTTPException
 from models import (
     Department,
+    FireAsset,
     ITAsset,
     MedicalAsset,
     OperationLog,
@@ -19,7 +20,13 @@ from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/transfer", tags=["transfer"])
 
-MODEL_MAP = {"it": ITAsset, "phone": PhoneAsset, "medical": MedicalAsset, "number": PhoneNumber}
+MODEL_MAP = {
+    "fire": FireAsset,
+    "it": ITAsset,
+    "phone": PhoneAsset,
+    "medical": MedicalAsset,
+    "number": PhoneNumber,
+}
 
 
 class TransferIn(BaseModel):

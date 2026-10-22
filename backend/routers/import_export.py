@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from models import (
     Department,
+    FireAsset,
     ITAsset,
     MedicalAsset,
     OperationLog,
@@ -27,6 +28,22 @@ router = APIRouter(prefix="/api/ie", tags=["导入导出"])
 
 # 模块配置：Excel列名 -> 模型字段名
 MODULES = {
+    "fire": {
+        "model": FireAsset,
+        "label": "消防设备",
+        "fields": [
+            ("资产编号", "asset_number", False),
+            ("消防设备", "name", True),
+            ("购买时间", "purchase_date", False),
+            ("到期时间", "expiry_date", False),
+            ("部门", "department", False),
+            ("使用人", "user_name", False),
+            ("状态", "status", False),
+            ("备注", "notes", False),
+        ],
+        "user_field": "user_name",
+        "auto_number_prefix": "FIRE",
+    },
     "it": {
         "model": ITAsset,
         "label": "IT设备",
@@ -138,6 +155,10 @@ def _get_module(name: str):
 
 
 def _authorize_module(module: str, user: User, db: Session, action="export"):
+    if module == "fire":
+        from deps import require_fire_view
+
+        require_fire_view(user)
     if module == "medical":
         require_medical_view(user)
     if (
@@ -392,8 +413,21 @@ def import_excel(
                 errors.append(f"第{row_idx}行：{error}")
                 continue
 
+        if module == "fire":
+            from routers.assets import FireAssetIn
+
+            try:
+                data["status"] = data.get("status") or "in_use"
+                checked = FireAssetIn(**data)
+                data = checked.model_dump()
+            except ValueError:
+                skipped += 1
+                errors.append(f"第{row_idx}行：消防设备名称或购买、到期日期无效")
+                continue
+
         # 去重检查
         unique_fields = {
+            "fire": "asset_number",
             "it": "asset_number",
             "phone": "asset_number",
             "medical": "asset_number",
@@ -413,7 +447,7 @@ def import_excel(
             data["asset_number"] = next_asset_number(db, model, cfg["auto_number_prefix"])
 
         # 自动状态：有使用人→in_use，无使用人→idle
-        if cfg["user_field"]:
+        if cfg["user_field"] and module != "fire":
             has_user = bool(data.get(cfg["user_field"]))
             data["status"] = "in_use" if has_user else "idle"
 

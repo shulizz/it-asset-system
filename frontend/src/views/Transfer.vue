@@ -59,6 +59,7 @@
           <select v-model="form.assetType" @change="loadAssets">
             <option value="it">IT 设备</option>
             <option value="phone">手机设备</option>
+            <option v-if="canViewFire" value="fire">消防设备</option>
             <option v-if="canViewMedical" value="medical">医疗设备</option>
           </select>
         </div>
@@ -108,6 +109,8 @@
   </div>
 </template>
 <script setup>
+import { hasFireAccess } from '../fireAccess'
+const canViewFire = computed(() => hasFireAccess(currentUser.value))
 import { hasMedicalAccess } from '../medicalAccess'
 const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
 import { currentUser } from '../userState'
@@ -177,6 +180,7 @@ async function loadAssets() {
   form.value.assetId = null
   selectedAsset.value = null
   const map = {
+    fire: '/assets/fire',
     it: '/assets/it',
     phone: '/assets/phone',
     medical: '/assets/medical',

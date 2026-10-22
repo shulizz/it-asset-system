@@ -83,6 +83,23 @@ def require_super_admin(user: User = Depends(get_current_user)):
     return user
 
 
+def can_view_fire(user):
+    return user.role == "super_admin"
+
+
+def require_fire_view(user):
+    if not can_view_fire(user):
+        raise HTTPException(403, "消防设备暂时仅超级管理员可访问")
+
+
+def is_fire_record(item):
+    return (
+        getattr(item, "__tablename__", "") == "fire_assets"
+        or getattr(item, "asset_type", None) == "fire"
+        or getattr(item, "table_name", None) == "fire_assets"
+    )
+
+
 def can_view_medical(user):
     # Ordinary role names are display labels and must never grant administrator access.
     return user.role == "super_admin" or bool(
@@ -96,6 +113,8 @@ def require_medical_view(user):
 
 
 def check_medical_record(item, user):
+    if is_fire_record(item):
+        require_fire_view(user)
     if (
         getattr(item, "__tablename__", "") == "medical_assets"
         or getattr(item, "asset_type", None) == "medical"
@@ -105,6 +124,13 @@ def check_medical_record(item, user):
 
 
 def filter_medical_records(query, model, user):
+    if not can_view_fire(user):
+        if getattr(model, "__tablename__", "") == "fire_assets":
+            return query.filter(False)
+        if hasattr(model, "asset_type"):
+            query = query.filter((model.asset_type.is_(None)) | (model.asset_type != "fire"))
+        if hasattr(model, "table_name"):
+            query = query.filter(model.table_name != "fire_assets")
     if can_view_medical(user):
         return query
     if getattr(model, "__tablename__", "") == "medical_assets":

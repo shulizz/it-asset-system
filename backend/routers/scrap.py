@@ -12,7 +12,16 @@ from deps import (
     scope_query,
 )
 from fastapi import APIRouter, Depends, HTTPException
-from models import ITAsset, MedicalAsset, OperationLog, PhoneAsset, PhoneNumber, ScrapRequest, User
+from models import (
+    FireAsset,
+    ITAsset,
+    MedicalAsset,
+    OperationLog,
+    PhoneAsset,
+    PhoneNumber,
+    ScrapRequest,
+    User,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from workflow import apply_transition, check_source_revision, validate_transition
@@ -20,6 +29,7 @@ from workflow import apply_transition, check_source_revision, validate_transitio
 router = APIRouter(prefix="/api/scrap", tags=["scrap"])
 
 ASSET_MAP = {
+    "fire": FireAsset,
     "it": ITAsset,
     "phone": PhoneAsset,
     "medical": MedicalAsset,

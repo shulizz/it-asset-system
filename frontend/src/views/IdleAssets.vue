@@ -1,6 +1,10 @@
 <template>
   <div>
     <PageHeading title="空闲设备" description="查看可调配的闲置资产，安排后续使用。"></PageHeading>
+    <div v-if="canViewFire" class="card" style="margin-bottom: 16px">
+      <div class="num">{{ byType.fire || 0 }}</div>
+      <div class="label">消防设备</div>
+    </div>
     <div class="stats" style="margin-bottom: 20px">
       <div class="card">
         <div class="num">{{ totalQuantity(list) }}</div>
@@ -67,6 +71,8 @@
   </div>
 </template>
 <script setup>
+import { hasFireAccess } from '../fireAccess'
+const canViewFire = computed(() => hasFireAccess(currentUser.value))
 import { assetQuantity, totalQuantity } from '../assetQuantity'
 import { hasMedicalAccess } from '../medicalAccess'
 const canViewMedical = computed(() => hasMedicalAccess(currentUser.value))
@@ -80,7 +86,7 @@ const router = useRouter()
 const list = ref([])
 const byType = ref({ it: 0, phone: 0, medical: 0, number: 0, wechat: 0 })
 onMounted(async () => {
-  const [it, phone, medical, numbers, wechat] = await Promise.all([
+  const [it, phone, medical, numbers, wechat, fire] = await Promise.all([
     api.get('/assets/it').catch(() => ({ data: [] })),
     api.get('/assets/phone').catch(() => ({ data: [] })),
     canViewMedical.value
@@ -88,8 +94,12 @@ onMounted(async () => {
       : Promise.resolve({ data: [] }),
     api.get('/assets/numbers').catch(() => ({ data: [] })),
     api.get('/wechat').catch(() => ({ data: [] })),
+    canViewFire.value
+      ? api.get('/assets/fire').catch(() => ({ data: [] }))
+      : Promise.resolve({ data: [] }),
   ])
   const idle = [
+    ...fire.data.filter((x) => x.status === 'idle').map((x) => ({ ...x, type: '消防设备' })),
     ...it.data.filter((x) => x.status === 'idle').map((x) => ({ ...x, type: 'IT设备' })),
     ...phone.data.filter((x) => x.status === 'idle').map((x) => ({ ...x, type: '手机' })),
     ...medical.data.filter((x) => x.status === 'idle').map((x) => ({ ...x, type: '医疗' })),
@@ -98,6 +108,7 @@ onMounted(async () => {
   ]
   list.value = idle.map((x, i) => ({ ...x, key: i }))
   byType.value = {
+    fire: fire.data.filter((x) => x.status === 'idle').length,
     it: it.data.filter((x) => x.status === 'idle').length,
     phone: totalQuantity(phone.data.filter((x) => x.status === 'idle')),
     medical: medical.data.filter((x) => x.status === 'idle').length,

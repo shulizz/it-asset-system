@@ -16,7 +16,9 @@ const escape = (value) =>
     (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char],
   )
 const typeText = (type) =>
-  ({ it: 'IT设备', phone: '手机设备', medical: '医疗设备', number: '电话号码' })[type] || ''
+  ({ fire: '消防设备', it: 'IT设备', phone: '手机设备', medical: '医疗设备', number: '电话号码' })[
+    type
+  ] || ''
 
 export function buildScrapPrintDocument(record, extra = {}) {
   const item = record || {}

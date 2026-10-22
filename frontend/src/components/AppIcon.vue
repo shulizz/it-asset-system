@@ -24,6 +24,7 @@ const paths = {
     'M10 5h4',
     'M11 19h2',
   ],
+  fire: ['M12 3c2 4 6 5 6 10a6 6 0 0 1-12 0c0-3 2-5 3-6v5c2-2 3-5 3-9Z'],
   medical: ['M4 4h16v16H4z', 'M12 8v8', 'M8 12h8'],
   number: ['M5 5h14v14H5z', 'M9 2v6', 'M15 2v6', 'M9 12h6', 'M9 16h3'],
   wechat: [
