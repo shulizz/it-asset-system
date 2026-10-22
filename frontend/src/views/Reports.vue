@@ -9,6 +9,61 @@
         button-class="btn btn-primary"
     /></PageHeading>
     <p v-if="loadError" style="color: #b45309">{{ loadError }}</p>
+    <section class="group-report" aria-labelledby="group-report-title">
+      <header class="group-report-heading">
+        <div>
+          <h3 id="group-report-title">医院 / 网络部统计</h3>
+          <p>
+            {{
+              groupSummary?.scope === 'department'
+                ? '当前仅统计你有权查看的部门。'
+                : '按部门归属汇总各模块数量。'
+            }}
+          </p>
+        </div>
+        <span class="group-scope">手机按实际台数</span>
+      </header>
+      <p v-if="groupError" class="group-error" role="alert">{{ groupError }}</p>
+      <p v-else-if="!groupSummary" class="group-note">正在加载分组统计…</p>
+      <template v-else>
+        <div class="group-panels">
+          <article
+            v-for="group in groupSummary.groups"
+            :key="group.key"
+            class="group-panel"
+            :class="group.key"
+            :aria-label="group.name + '模块统计'"
+          >
+            <header>
+              <h4>{{ group.name }}</h4>
+              <p>
+                {{
+                  group.key === 'hospital' ? '护理部、医院、门诊、办公室' : '除医院范围外的其余部门'
+                }}
+              </p>
+            </header>
+            <dl>
+              <div v-for="module in visibleGroupModules" :key="module.key">
+                <dt>{{ module.label }}</dt>
+                <dd>{{ group.counts[module.key] }}</dd>
+              </div>
+            </dl>
+          </article>
+        </div>
+        <p class="group-note">
+          含在用、闲置及已报废设备，不含已移出档案。医疗、消防仅在有查看权限时显示。
+        </p>
+        <p v-if="hasUnassigned" class="group-note">
+          未分配部门（未计入两组）：{{ unassignedText }}
+        </p>
+        <p
+          v-if="groupSummary.wechat_count !== null && hasWeChatRead(currentUser)"
+          class="group-note"
+        >
+          微信账号尚无部门归属，暂不分组；可查看账号共 {{ groupSummary.wechat_count }} 个。
+        </p>
+      </template>
+    </section>
     <div class="stats">
       <div v-if="canViewFire" class="card">
         <div class="num">{{ total.fire || 0 }}</div>
@@ -122,6 +177,33 @@ const status = ref({ inUse: 0, idle: 0, scrapped: 0 })
 const deptCount = ref(0)
 const deptStats = ref([])
 const idleList = ref([])
+const groupSummary = ref(null),
+  groupError = ref('')
+const visibleGroupModules = computed(() =>
+  (groupSummary.value?.modules || []).filter(
+    (module) =>
+      (module.key !== 'medical' || canViewMedical.value) &&
+      (module.key !== 'fire' || canViewFire.value),
+  ),
+)
+const hasUnassigned = computed(() =>
+  visibleGroupModules.value.some((module) => groupSummary.value.unassigned[module.key] > 0),
+)
+const unassignedText = computed(() =>
+  visibleGroupModules.value
+    .filter((module) => groupSummary.value.unassigned[module.key] > 0)
+    .map((module) => `${module.label} ${groupSummary.value.unassigned[module.key]}`)
+    .join('，'),
+)
+
+async function loadGroups() {
+  try {
+    groupSummary.value = (await api.get('/reports/group-summary')).data
+    groupError.value = ''
+  } catch {
+    groupError.value = '医院 / 网络部统计加载失败，请刷新重试'
+  }
+}
 
 function statusText(s) {
   return { in_use: '在用', idle: '闲置', scrapped: '已报废' }[s] || s
@@ -137,6 +219,7 @@ onMounted(async () => {
     await refreshCurrentUser()
   } catch {
     loadError.value = '无法读取用户权限，请重新登录'
+    groupError.value = '无法读取用户权限，请重新登录后查看分组统计'
     return
   }
   const errors = []
@@ -159,6 +242,7 @@ onMounted(async () => {
     fetchModule('/departments', '部门'),
     canWechat ? fetchModule('/wechat', '微信账号') : Promise.resolve({ data: [] }),
     canViewFire.value ? fetchModule('/assets/fire', '消防设备') : Promise.resolve({ data: [] }),
+    loadGroups(),
   ])
   if (errors.length) loadError.value = `${errors.join('、')}加载失败，相关统计不完整，请刷新重试`
   total.value = {
@@ -193,6 +277,95 @@ onMounted(async () => {
 })
 </script>
 <style scoped>
+.group-report {
+  margin-bottom: 24px;
+}
+.group-report-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 8px 0 14px;
+}
+.group-report-heading h3 {
+  font-size: 16px;
+  margin: 0 0 5px;
+}
+.group-report-heading p,
+.group-note {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.group-scope {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.group-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.group-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.group-panel header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+  border-left: 4px solid #2563eb;
+}
+.group-panel.network header {
+  border-left-color: #168374;
+}
+.group-panel h4 {
+  margin: 0 0 5px;
+  font-size: 18px;
+}
+.group-panel header p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.group-panel dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px 12px;
+  padding: 20px;
+  margin: 0;
+}
+.group-panel dt {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.group-panel dd {
+  font-size: 26px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+.group-note {
+  margin: 10px 0 0;
+}
+.group-error {
+  color: #b42318;
+  padding: 12px 0;
+}
+@media (max-width: 760px) {
+  .group-panels {
+    grid-template-columns: 1fr;
+  }
+  .group-report-heading {
+    align-items: flex-start;
+  }
+  .group-panel dl {
+    padding: 16px;
+  }
+}
 .btn-export {
   margin-left: 12px;
   background: #16a34a;

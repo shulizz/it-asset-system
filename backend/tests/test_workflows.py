@@ -43,6 +43,123 @@ from sqlalchemy import create_engine, text
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_hospital_network_report_groups_quantities_scope_and_export(self):
+        from models import FireAsset, PhoneAsset, PhoneNumber
+
+        with SessionLocal() as db:
+            for identity, name in enumerate(["医院", "护理部", "门诊", "办公室"], start=3):
+                db.add(Department(id=identity, name=name))
+                db.add(
+                    ITAsset(
+                        asset_number=f"HOSP-{identity}",
+                        name="医院设备",
+                        department_id=identity,
+                        department=name,
+                        status="in_use",
+                    )
+                )
+            db.add_all(
+                [
+                    ITAsset(
+                        asset_number="NETWORK",
+                        name="网络设备",
+                        department_id=1,
+                        department="甲部门",
+                        status="idle",
+                    ),
+                    ITAsset(
+                        asset_number="BY-ID",
+                        name="以部门ID为准",
+                        department_id=2,
+                        department="医院",
+                        status="in_use",
+                    ),
+                    ITAsset(asset_number="UNASSIGNED", name="未分配", status="in_use"),
+                    ITAsset(
+                        asset_number="ARCHIVED",
+                        name="移出档案",
+                        department_id=3,
+                        department="医院",
+                        status="archived",
+                    ),
+                    PhoneAsset(
+                        asset_number="PH-H",
+                        brand_model="手机",
+                        department_id=3,
+                        department="医院",
+                        quantity=12,
+                        status="in_use",
+                    ),
+                    PhoneAsset(
+                        asset_number="PH-N",
+                        brand_model="手机",
+                        department_id=1,
+                        department="甲部门",
+                        quantity=20,
+                        status="idle",
+                    ),
+                    PhoneNumber(
+                        number="10086", department_id=5, department="门诊", status="in_use"
+                    ),
+                    MedicalAsset(
+                        asset_number="MED-H",
+                        name="医疗设备",
+                        department_id=3,
+                        department="医院",
+                        status="in_use",
+                    ),
+                    FireAsset(
+                        asset_number="FIRE-H",
+                        name="消防设备",
+                        department_id=3,
+                        department="医院",
+                        status="in_use",
+                    ),
+                    WeChatAccount(wx_account="global-wechat"),
+                ]
+            )
+            db.commit()
+        result = self.client.get("/api/reports/group-summary", headers=self.headers(1))
+        self.assertEqual(result.status_code, 200, result.text)
+        summary = result.json()
+        hospital, network = summary["groups"]
+        self.assertEqual(
+            (hospital["counts"]["it"], network["counts"]["it"], summary["unassigned"]["it"]),
+            (4, 2, 1),
+        )
+        self.assertEqual((hospital["counts"]["phone"], network["counts"]["phone"]), (12, 20))
+        self.assertEqual(hospital["counts"]["number"], 1)
+        self.assertEqual(hospital["counts"]["medical"], 1)
+        self.assertEqual(hospital["counts"]["fire"], 1)
+        self.assertEqual(summary["wechat_count"], 1)
+        exported = self.client.get("/api/reports/export", headers=self.headers(1))
+        book = openpyxl.load_workbook(BytesIO(exported.content))
+        rows = list(book["医院网络部统计"].values)
+        self.assertEqual(rows[1][rows[0].index("手机设备")], 12)
+        self.assertEqual(rows[2][rows[0].index("手机设备")], 20)
+        with SessionLocal() as db:
+            user = db.get(User, 3)
+            user.permissions = json.dumps(["reports", "export"])
+            user.data_scope = "all_read_dept_write"
+            db.commit()
+        summary = self.client.get("/api/reports/group-summary", headers=self.headers(3)).json()
+        self.assertNotIn("medical", summary["groups"][0]["counts"])
+        self.assertNotIn("fire", summary["groups"][0]["counts"])
+        self.assertIsNone(summary["wechat_count"])
+        self.assertEqual(summary["groups"][0]["counts"]["it"], 4)
+        with SessionLocal() as db:
+            db.get(User, 3).data_scope = "department"
+            db.commit()
+        summary = self.client.get("/api/reports/group-summary", headers=self.headers(3)).json()
+        self.assertEqual(summary["scope"], "department")
+        self.assertEqual(summary["groups"][0]["counts"]["it"], 0)
+        self.assertEqual(summary["groups"][1]["counts"]["it"], 1)
+        self.assertEqual(summary["groups"][1]["counts"]["phone"], 20)
+        self.assertEqual(
+            self.client.get("/api/reports/group-summary", headers=self.headers(2)).status_code, 403
+        )
+        self.assertIn(self.client.get("/api/reports/group-summary").status_code, (401, 403))
+
     def test_fire_location_round_trip_import_export_and_legacy_update(self):
         item = self.create_fire_fixture()
         response = self.client.put(

@@ -88,6 +88,19 @@ async function main() {
             return { data: new Blob(['xlsx']) }
           }
           if (url === '/departments') return { data: [{ name: '甲部门' }] }
+          if (url === '/reports/group-summary')
+            return {
+              data: {
+                modules: [{ key: 'it', label: 'IT设备' }],
+                groups: [
+                  { name: '医院', key: 'hospital', counts: { it: 2 } },
+                  { name: '网络部', key: 'network', counts: { it: 4 } },
+                ],
+                unassigned: { it: 1 },
+                wechat_count: null,
+                scope: 'all',
+              },
+            }
           if (url === '/assets/phone')
             return { data: [{ quantity: 20, department: '甲部门', status: 'idle' }] }
           return { data: [{ asset_number: 'IT-1', department: '甲部门', status: 'idle' }] }
@@ -106,10 +119,13 @@ async function main() {
         throw Error(message)
       },
     },
-    ['total', 'canExport', 'deptStats'],
+    ['total', 'canExport', 'deptStats', 'groupSummary', 'hasUnassigned', 'unassignedText'],
   )
   await report.mounted[0]()
   assert.equal(report.state.total.value.it, 1)
+  assert.equal(report.state.groupSummary.value.groups[0].counts.it, 2)
+  assert.equal(report.state.hasUnassigned.value, true)
+  assert.match(report.state.unassignedText.value, /IT设备 1/)
   assert.equal(report.state.total.value.phone, 20)
   assert.equal(report.state.deptStats.value[0].phone, 20)
   assert.equal(report.state.total.value.wechat, '无权限')
