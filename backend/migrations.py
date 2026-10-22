@@ -34,12 +34,7 @@ def migrate_schema(engine):
                 if column_name not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column}"))
         for table in ["users", "it_assets", "phone_assets", "medical_assets", "phone_numbers"]:
-            if table != "users":
-                conn.execute(
-                    text(
-                        f"UPDATE {table} SET department=NULL WHERE trim(coalesce(department, ''))=''"
-                    )
-                )
+            # Empty legacy labels are already excluded below; preserve their exact values.
             conn.execute(
                 text(
                     f"INSERT OR IGNORE INTO departments(name, note) SELECT DISTINCT trim(department), '历史数据自动迁移' FROM {table} WHERE department IS NOT NULL AND trim(department)<>''"

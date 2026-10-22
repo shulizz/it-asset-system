@@ -57,6 +57,11 @@ class WorkflowTests(unittest.TestCase):
                         "INSERT INTO phone_assets (asset_number,brand_model,status) VALUES ('LEGACY','原手机','idle')"
                     )
                 )
+                connection.execute(
+                    text(
+                        "INSERT INTO it_assets (asset_number,name,department) VALUES ('EMPTY','空部门设备','')"
+                    )
+                )
             migrate_schema(old_engine)
             migrate_schema(old_engine)
             with old_engine.connect() as connection:
@@ -64,6 +69,12 @@ class WorkflowTests(unittest.TestCase):
                     text("SELECT asset_number,brand_model,quantity,revision FROM phone_assets")
                 ).one()
                 self.assertEqual(tuple(row), ("LEGACY", "原手机", 1, 0))
+                self.assertEqual(
+                    connection.execute(
+                        text("SELECT department FROM it_assets WHERE asset_number='EMPTY'")
+                    ).scalar_one(),
+                    "",
+                )
             old_engine.dispose()
 
     def test_phone_approved_application_splits_quantity(self):
