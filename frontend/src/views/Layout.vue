@@ -30,9 +30,6 @@
         >
           <div class="nav-group-title">资产档案</div>
           <router-link to="/assets-it" class="nav-item"><AppIcon name="it" />IT 设备</router-link>
-          <router-link v-if="hasFireAccess(user)" to="/assets-fire" class="nav-item"
-            ><AppIcon name="fire" />消防设备</router-link
-          >
           <router-link to="/assets-phone" class="nav-item"
             ><AppIcon name="phone" />手机设备</router-link
           >
@@ -43,6 +40,9 @@
             ><AppIcon name="number" />电话号码</router-link
           >
         </template>
+        <router-link v-if="hasFireAccess(user)" to="/assets-fire" class="nav-item"
+          ><AppIcon name="fire" />消防设备</router-link
+        >
         <router-link v-if="hasWeChatRead(user)" to="/wechat" class="nav-item"
           ><AppIcon name="wechat" />微信账号</router-link
         >

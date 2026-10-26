@@ -84,12 +84,14 @@ def require_super_admin(user: User = Depends(get_current_user)):
 
 
 def can_view_fire(user):
-    return user.role == "super_admin"
+    return user.role == "super_admin" or (
+        user.data_scope == "all" and "fire" in get_user_permissions(user, None)
+    )
 
 
 def require_fire_view(user):
     if not can_view_fire(user):
-        raise HTTPException(403, "消防设备暂时仅超级管理员可访问")
+        raise HTTPException(403, "需要超级管理员或明确分配的消防设备管理权限")
 
 
 def is_fire_record(item):

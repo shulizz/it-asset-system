@@ -196,7 +196,7 @@ def validate_access(data):
         and data.data_scope != "all"
         and GLOBAL_PERMISSIONS.intersection(data.permissions or [])
     ):
-        raise HTTPException(400, "部门管理、全局日志和微信管理权限需要全部部门数据范围")
+        raise HTTPException(400, "部门管理、全局日志、微信及消防管理权限需要全部部门数据范围")
 
     for permission, dependencies in PERMISSION_DEPENDENCIES.items():
         if permission in (data.permissions or []) and not dependencies.issubset(data.permissions):

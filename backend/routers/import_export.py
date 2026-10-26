@@ -160,6 +160,7 @@ def _authorize_module(module: str, user: User, db: Session, action="export"):
         from deps import require_fire_view
 
         require_fire_view(user)
+        return  # Fire management includes only this module's import/export.
     if module == "medical":
         require_medical_view(user)
     if (

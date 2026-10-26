@@ -3,12 +3,12 @@ from typing import Literal, Optional
 
 from database import get_db, get_write_db
 from deps import (
+    can_view_fire,
     can_view_medical,
     check_scope,
     require_any,
     require_medical_view,
     require_perm,
-    require_super_admin,
     scope_query,
 )
 from fastapi import APIRouter, Depends, HTTPException
@@ -570,18 +570,17 @@ def send_expiry_email(
     return result
 
 
-# ===== 消防设备（暂仅超级管理员） =====
+# ===== 消防设备（超级管理员或独立消防权限） =====
 @router.get("/fire/notice-recipients")
 def fire_notice_recipients(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(require_perm("fire")),
 ):
     from notifier import smtp_configured
 
     users = (
         db.query(User)
         .filter(
-            User.role == "super_admin",
             User.is_active == 1,
             User.email.isnot(None),
             User.email != "",
@@ -590,7 +589,9 @@ def fire_notice_recipients(
         .all()
     )
     return {
-        "users": [{"id": u.id, "name": u.name, "email": u.email} for u in users],
+        "users": [
+            {"id": u.id, "name": u.name, "email": u.email} for u in users if can_view_fire(u)
+        ],
         "smtp_configured": smtp_configured(),
     }
 
@@ -600,7 +601,7 @@ def send_fire_email(
     data: ExpiryEmailIn,
     days: int = 30,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(require_perm("fire")),
 ):
     if not 1 <= days <= 365:
         raise HTTPException(400, "提醒天数必须在1至365之间")
@@ -612,8 +613,8 @@ def send_fire_email(
     )
     if len(users) != len(ids):
         raise HTTPException(400, "所选用户已停用、被删除或未填写邮箱，请刷新收件人列表")
-    if any(user.role != "super_admin" for user in users):
-        raise HTTPException(403, "消防设备提醒暂时仅可发送给超级管理员")
+    if any(not can_view_fire(user) for user in users):
+        raise HTTPException(403, "消防设备提醒仅可发送给具备消防设备访问权限的用户")
     from notifier import send_fire_expiry_notice
 
     result = send_fire_expiry_notice(db, days, list(dict.fromkeys(u.email for u in users)))
@@ -655,7 +656,7 @@ class FireAssetIn(BaseModel):
 
 
 @router.get("/fire")
-def list_fire(db: Session = Depends(get_db), current_user: User = Depends(require_super_admin)):
+def list_fire(db: Session = Depends(get_db), current_user: User = Depends(require_perm("fire"))):
     return scope_query(db.query(FireAsset), FireAsset, current_user).all()
 
 
@@ -663,7 +664,7 @@ def list_fire(db: Session = Depends(get_db), current_user: User = Depends(requir
 def create_fire(
     data: FireAssetIn,
     db: Session = Depends(get_write_db),
-    current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(require_perm("fire")),
 ):
     number = data.asset_number or next_asset_number(db, FireAsset, "FIRE")
     if db.query(FireAsset).filter(FireAsset.asset_number == number).first():
@@ -690,7 +691,7 @@ def update_fire(
     item_id: int,
     data: FireAssetIn,
     db: Session = Depends(get_write_db),
-    current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(require_perm("fire")),
 ):
     item = (
         scope_query(db.query(FireAsset), FireAsset, current_user)

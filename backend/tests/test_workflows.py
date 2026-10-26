@@ -43,6 +43,86 @@ from sqlalchemy import create_engine, text
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_delegated_fire_manager_has_only_fire_access(self):
+        with SessionLocal() as db:
+            user = db.get(User, 3)
+            user.permissions = json.dumps(["fire"])
+            user.data_scope = "all"
+            user.role = "消防管理员"
+            user.email = "fire-manager@example.com"
+            db.commit()
+        headers = self.headers(3)
+        created = self.client.post(
+            "/api/assets/fire",
+            headers=headers,
+            json={"name": "灭火器", "department": "乙部门", "location": "二楼"},
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        identity = created.json()["id"]
+        self.assertEqual(
+            self.client.put(
+                f"/api/assets/fire/{identity}",
+                headers=headers,
+                json={"name": "灭火器", "location": "三楼"},
+            ).status_code,
+            200,
+        )
+        for path in [
+            "/api/assets/fire",
+            "/api/ie/fire/template",
+            "/api/ie/fire/export",
+            "/api/assets/fire/notice-recipients",
+        ]:
+            self.assertEqual(self.client.get(path, headers=headers).status_code, 200, path)
+        recipients = self.client.get("/api/assets/fire/notice-recipients", headers=headers).json()[
+            "users"
+        ]
+        self.assertIn(3, [user["id"] for user in recipients])
+        with patch(
+            "notifier.send_fire_expiry_notice",
+            return_value={"success": True, "message": "测试", "count": 0},
+        ) as send:
+            result = self.client.post(
+                "/api/assets/fire/send-expiry-email",
+                headers=headers,
+                json={"recipient_user_ids": [3]},
+            )
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(send.call_args.args[2], ["fire-manager@example.com"])
+        request = self.client.post(
+            "/api/delete-request",
+            headers=headers,
+            json={
+                "table_name": "fire_assets",
+                "record_id": identity,
+                "record_desc": "灭火器",
+                "reason": "测试",
+            },
+        )
+        self.assertEqual(request.status_code, 200, request.text)
+        self.assertEqual(
+            self.client.put(
+                f"/api/delete-request/{request.json()['id']}/approve", headers=headers
+            ).status_code,
+            403,
+        )
+        for path in [
+            "/api/assets/it",
+            "/api/assets/phone",
+            "/api/assets/medical",
+            "/api/assets/numbers",
+            "/api/wechat",
+            "/api/reports/group-summary",
+            "/api/auth/users",
+            "/api/transfer",
+            "/api/ie/it/export",
+        ]:
+            self.assertEqual(self.client.get(path, headers=headers).status_code, 403, path)
+        with SessionLocal() as db:
+            db.get(User, 3).permissions = "[]"
+            db.commit()
+        self.assertEqual(self.client.get("/api/assets/fire", headers=headers).status_code, 403)
+
     def test_scrapped_hosts_monitors_are_separate_from_report_totals(self):
         from models import PhoneAsset
 
@@ -412,7 +492,7 @@ class WorkflowTests(unittest.TestCase):
 
         with SessionLocal() as db:
             user = db.get(User, 3)
-            user.permissions = json.dumps(sorted(PERMISSION_KEYS))
+            user.permissions = json.dumps(sorted(PERMISSION_KEYS - {"fire"}))
             user.role = "管理员"
             user.data_scope = "all"
             db.commit()

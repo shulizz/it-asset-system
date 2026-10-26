@@ -1,6 +1,7 @@
 """Permissions explicitly assigned per user by a super administrator."""
 
 ALL_PERMISSIONS = [
+    ("fire", "消防设备管理（含导入导出、到期邮件）"),
     ("assets", "查看资产档案"),
     ("assets_write", "新增和编辑资产"),
     ("import", "导入数据"),
@@ -21,7 +22,7 @@ ALL_PERMISSIONS = [
     ("logs", "全局操作日志（全部部门范围）"),
 ]
 PERMISSION_KEYS = {key for key, _ in ALL_PERMISSIONS}
-GLOBAL_PERMISSIONS = {"departments", "logs", "wechat"}
+GLOBAL_PERMISSIONS = {"departments", "logs", "wechat", "fire"}
 PERMISSION_DEPENDENCIES = {"wechat_secret": {"wechat"}, "wechat_edit": {"wechat_read"}}
 
 

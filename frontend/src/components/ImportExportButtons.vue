@@ -22,12 +22,14 @@
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import FileDownloadButton from './FileDownloadButton.vue'
+import { hasFireAccess } from '../fireAccess'
 import { currentUser, refreshCurrentUser } from '../userState'
 
 const props = defineProps({ module: { type: String, required: true } })
 const moduleName = computed(
   () =>
     ({
+      fire: '消防设备',
       it: 'IT设备',
       phone: '手机设备',
       medical: '医疗设备',
@@ -47,18 +49,21 @@ const canUseModule = computed(
       currentUser.value.role === 'super_admin' ||
       currentUser.value.data_scope === 'all'),
 )
-const canExport = computed(
-  () =>
-    (canUseModule.value ||
-      (props.module === 'wechat' && currentUser.value.permissions?.includes('wechat_read'))) &&
-    currentUser.value.permissions?.includes('export'),
+const canExport = computed(() =>
+  props.module === 'fire'
+    ? hasFireAccess(currentUser.value)
+    : (canUseModule.value ||
+        (props.module === 'wechat' && currentUser.value.permissions?.includes('wechat_read'))) &&
+      currentUser.value.permissions?.includes('export'),
 )
-const canImport = computed(
-  () =>
-    canUseModule.value &&
-    currentUser.value.permissions?.includes('import') &&
-    (currentUser.value.data_scope === 'all' || !['wechat', 'department'].includes(props.module)) &&
-    (props.module !== 'wechat' || currentUser.value.permissions?.includes('wechat_secret')),
+const canImport = computed(() =>
+  props.module === 'fire'
+    ? hasFireAccess(currentUser.value)
+    : canUseModule.value &&
+      currentUser.value.permissions?.includes('import') &&
+      (currentUser.value.data_scope === 'all' ||
+        !['wechat', 'department'].includes(props.module)) &&
+      (props.module !== 'wechat' || currentUser.value.permissions?.includes('wechat_secret')),
 )
 onMounted(async () => {
   try {

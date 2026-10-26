@@ -1,2 +1,3 @@
-// Fire equipment is reserved for the super administrator until grants are introduced.
-export const hasFireAccess = (user) => user.role === 'super_admin'
+export const hasFireAccess = (user) =>
+  user.role === 'super_admin' ||
+  (user.data_scope === 'all' && (user.permissions || []).includes('fire'))

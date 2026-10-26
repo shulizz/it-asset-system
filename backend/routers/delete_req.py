@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from database import get_db, get_write_db
 from deps import (
+    can_view_fire,
     check_medical_record,
     check_scope,
     filter_medical_records,
@@ -150,7 +151,9 @@ def create_request(
     else:
         if data.table_name not in TABLE_MAP:
             raise HTTPException(400, "不允许申请删除该类型记录")
-        if "assets_write" not in get_user_permissions(current_user, db):
+        if "assets_write" not in get_user_permissions(current_user, db) and not (
+            data.table_name == "fire_assets" and can_view_fire(current_user)
+        ):
             raise HTTPException(403, "没有申请删除权限")
         record = db.get(TABLE_MAP[data.table_name], data.record_id)
         if not record:

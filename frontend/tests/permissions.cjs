@@ -7,6 +7,19 @@ const { parse } = require('vue/compiler-sfc')
 const root = path.join(__dirname, '..', 'src')
 
 async function main() {
+  const { hasFireAccess } = await import(
+    'data:text/javascript;base64,' +
+      Buffer.from(fs.readFileSync(path.join(root, 'fireAccess.js'), 'utf8')).toString('base64')
+  )
+  assert.equal(
+    hasFireAccess({ role: '消防管理员', data_scope: 'all', permissions: ['fire'] }),
+    true,
+  )
+  assert.equal(hasFireAccess({ role: '消防管理员', data_scope: 'all', permissions: [] }), false)
+  assert.equal(
+    hasFireAccess({ role: '消防管理员', data_scope: 'department', permissions: ['fire'] }),
+    false,
+  )
   const { hasMedicalAccess } = await import(
     'data:text/javascript;base64,' +
       Buffer.from(fs.readFileSync(path.join(root, 'medicalAccess.js'), 'utf8')).toString('base64')
