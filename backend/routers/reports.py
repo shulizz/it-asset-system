@@ -49,11 +49,12 @@ def export_report(db: Session = Depends(get_db), user=Depends(require_perm("repo
             department_index = next(
                 (index for index, field in enumerate(fields) if field[1] == "department"), None
             )
+            status_index = next(index for index, field in enumerate(fields) if field[1] == "status")
             ws = wb.create_sheet(cfg["label"])
             ws.append([field[0] for field in fields])
             for row in rows:
                 append_text_row(ws, list(row))
-                if module != "wechat":
+                if module != "wechat" and row[status_index] != "scrapped":
                     key = row[department_index] or "未分配部门"
                     distribution.setdefault(
                         key, dict.fromkeys(["it", "phone", "fire", "medical", "number"], 0)
@@ -83,12 +84,38 @@ def export_report(db: Session = Depends(get_db), user=Depends(require_perm("repo
             ws, ["未分配部门（未计入两组）"] + [summary["unassigned"][key] for key in keys]
         )
         append_text_row(ws, ["医院范围：护理部、医院、门诊、办公室；网络部范围：其余部门。"])
-        append_text_row(
-            ws, ["按可查看范围统计现有台账，含已报废，不含已移出档案；手机按实际台数。"]
-        )
+        append_text_row(ws, ["合计不含已报废及已移出档案设备；报废数量单独统计；手机按实际台数。"])
         if summary["wechat_count"] is not None:
             append_text_row(
-                ws, ["微信账号未设置部门，不分组；可查看账号总数", summary["wechat_count"]]
+                ws, ["微信账号未设置部门，不分组；可查看未报废账号总数", summary["wechat_count"]]
             )
+        ws = wb.create_sheet("报废分类统计")
+        extra_modules = [module for module in summary["modules"] if module["key"] != "it"]
+        append_text_row(
+            ws,
+            ["分组", "报废主机", "报废显示器", "报废其他IT设备", "报废IT合计"]
+            + ["报废" + module["label"] for module in extra_modules],
+        )
+        for group in [
+            *summary["groups"],
+            {
+                "name": "未分配部门",
+                "scrapped": summary["unassigned_scrapped"],
+                "it_scrapped": summary["unassigned_it_scrapped"],
+            },
+        ]:
+            detail = group["it_scrapped"]
+            append_text_row(
+                ws,
+                [
+                    group["name"],
+                    detail["hosts"],
+                    detail["monitors"],
+                    detail["other"],
+                    group["scrapped"]["it"],
+                ]
+                + [group["scrapped"][module["key"]] for module in extra_modules],
+            )
+        append_text_row(ws, ["报废数量未计入部门统计和医院网络部统计的合计。"])
         filename = f"资产报表_{date.today()}.xlsx"
         return workbook_response(wb, filename)

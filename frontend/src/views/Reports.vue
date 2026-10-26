@@ -48,13 +48,48 @@
                 <dd>{{ group.counts[module.key] }}</dd>
               </div>
             </dl>
+            <section class="group-scrap" :aria-label="group.name + '报废分类统计'">
+              <h5>已报废（不计入合计）</h5>
+              <dl>
+                <div>
+                  <dt>主机报废</dt>
+                  <dd>{{ group.it_scrapped?.hosts ?? 0 }}</dd>
+                </div>
+                <div>
+                  <dt>显示器报废</dt>
+                  <dd>{{ group.it_scrapped?.monitors ?? 0 }}</dd>
+                </div>
+                <div>
+                  <dt>其他 IT 报废</dt>
+                  <dd>{{ group.it_scrapped?.other ?? 0 }}</dd>
+                </div>
+                <div
+                  v-for="module in visibleGroupModules.filter((m) => m.key !== 'it')"
+                  :key="module.key"
+                >
+                  <dt>{{ module.label }}报废</dt>
+                  <dd>{{ group.scrapped?.[module.key] ?? 0 }}</dd>
+                </div>
+              </dl>
+            </section>
           </article>
         </div>
         <p class="group-note">
-          含在用、闲置及已报废设备，不含已移出档案。医疗、消防仅在有查看权限时显示。
+          上方合计不含已报废、已移出档案设备；报废数量单独列出。医疗、消防按查看权限显示。
         </p>
         <p v-if="hasUnassigned" class="group-note">
           未分配部门（未计入两组）：{{ unassignedText }}
+        </p>
+        <p
+          v-if="
+            groupSummary.unassigned_it_scrapped &&
+            Object.values(groupSummary.unassigned_it_scrapped).some((n) => n > 0)
+          "
+          class="group-note"
+        >
+          未分配部门的报废 IT：主机 {{ groupSummary.unassigned_it_scrapped.hosts }} 台，显示器
+          {{ groupSummary.unassigned_it_scrapped.monitors }} 台，其他
+          {{ groupSummary.unassigned_it_scrapped.other }} 台。
         </p>
         <p
           v-if="groupSummary.wechat_count !== null && hasWeChatRead(currentUser)"
@@ -101,7 +136,11 @@
       </div>
       <div class="card">
         <div class="num" style="color: #dc2626">{{ status.scrapped }}</div>
-        <div class="label">已报废</div>
+        <div class="label">已报废（单独统计）</div>
+        <p v-if="groupSummary?.it_scrapped_totals" class="group-note">
+          主机 {{ groupSummary.it_scrapped_totals.hosts }} 台 · 显示器
+          {{ groupSummary.it_scrapped_totals.monitors }} 台
+        </p>
       </div>
       <div class="card">
         <div class="num">{{ deptCount }}</div>
@@ -177,6 +216,8 @@ const status = ref({ inUse: 0, idle: 0, scrapped: 0 })
 const deptCount = ref(0)
 const deptStats = ref([])
 const idleList = ref([])
+const retainedAssets = (rows) =>
+  rows.filter((item) => !['scrapped', 'archived'].includes(item.status))
 const groupSummary = ref(null),
   groupError = ref('')
 const visibleGroupModules = computed(() =>
@@ -246,12 +287,12 @@ onMounted(async () => {
   ])
   if (errors.length) loadError.value = `${errors.join('、')}加载失败，相关统计不完整，请刷新重试`
   total.value = {
-    it: it.data.length,
-    phone: totalQuantity(phone.data),
-    fire: fire.data.length,
-    medical: medical.data.length,
-    number: numbers.data.length,
-    wechat: canWechat ? wc.data.filter((x) => x.wx_account).length : '无权限',
+    it: retainedAssets(it.data).length,
+    phone: totalQuantity(retainedAssets(phone.data)),
+    fire: retainedAssets(fire.data).length,
+    medical: retainedAssets(medical.data).length,
+    number: retainedAssets(numbers.data).length,
+    wechat: canWechat ? retainedAssets(wc.data).filter((x) => x.wx_account).length : '无权限',
   }
   deptCount.value = depts.data.length
 
@@ -268,11 +309,11 @@ onMounted(async () => {
 
   deptStats.value = depts.data.map((d) => ({
     name: d.name,
-    fire: fire.data.filter((x) => x.department === d.name).length,
-    it: it.data.filter((x) => x.department === d.name).length,
-    phone: totalQuantity(phone.data.filter((x) => x.department === d.name)),
-    medical: medical.data.filter((x) => x.department === d.name).length,
-    number: numbers.data.filter((x) => x.department === d.name).length,
+    fire: retainedAssets(fire.data).filter((x) => x.department === d.name).length,
+    it: retainedAssets(it.data).filter((x) => x.department === d.name).length,
+    phone: totalQuantity(retainedAssets(phone.data).filter((x) => x.department === d.name)),
+    medical: retainedAssets(medical.data).filter((x) => x.department === d.name).length,
+    number: retainedAssets(numbers.data).filter((x) => x.department === d.name).length,
   }))
 })
 </script>
@@ -347,6 +388,24 @@ onMounted(async () => {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   margin: 0;
+}
+.group-scrap {
+  border-top: 1px solid var(--line);
+  background: #fffaf6;
+}
+.group-scrap h5 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9a451c;
+  padding: 14px 20px 0;
+  margin: 0;
+}
+.group-scrap dl {
+  padding-top: 12px;
+}
+.group-scrap dd {
+  font-size: 22px;
+  color: #9a451c;
 }
 .group-note {
   margin: 10px 0 0;

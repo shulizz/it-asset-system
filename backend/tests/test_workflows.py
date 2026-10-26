@@ -43,6 +43,80 @@ from sqlalchemy import create_engine, text
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_scrapped_hosts_monitors_are_separate_from_report_totals(self):
+        from models import PhoneAsset
+
+        with SessionLocal() as db:
+            db.add(Department(id=3, name="医院"))
+            for department, identity, hosts, monitors in [("甲部门", 1, 27, 18), ("医院", 3, 1, 1)]:
+                for name, category, count in [
+                    ("主机", "台式机", hosts),
+                    ("显示器", "显示器", monitors),
+                ]:
+                    for index in range(count):
+                        db.add(
+                            ITAsset(
+                                asset_number=f"HIST-{identity}-{category}-{index}",
+                                name=name,
+                                category=category,
+                                department_id=identity,
+                                department=department,
+                                status="scrapped",
+                            )
+                        )
+                db.add(
+                    ITAsset(
+                        asset_number=f"ACTIVE-{identity}",
+                        name="在用主机",
+                        department_id=identity,
+                        department=department,
+                        status="in_use",
+                    )
+                )
+            db.add(
+                PhoneAsset(
+                    asset_number="PH-SCRAP",
+                    brand_model="手机",
+                    quantity=5,
+                    department_id=1,
+                    department="甲部门",
+                    status="scrapped",
+                )
+            )
+            db.add(
+                PhoneAsset(
+                    asset_number="PH-ACTIVE",
+                    brand_model="手机",
+                    quantity=20,
+                    department_id=1,
+                    department="甲部门",
+                    status="in_use",
+                )
+            )
+            db.commit()
+        result = self.client.get("/api/reports/group-summary", headers=self.headers(1))
+        self.assertEqual(result.status_code, 200, result.text)
+        summary = result.json()
+        hospital, network = summary["groups"]
+        self.assertEqual((hospital["counts"]["it"], network["counts"]["it"]), (1, 1))
+        self.assertEqual(hospital["it_scrapped"], {"hosts": 1, "monitors": 1, "other": 0})
+        self.assertEqual(network["it_scrapped"], {"hosts": 27, "monitors": 18, "other": 0})
+        self.assertEqual(network["scrapped"]["phone"], 5)
+        self.assertEqual(network["counts"]["phone"], 20)
+        self.assertEqual(summary["it_scrapped_totals"], {"hosts": 28, "monitors": 19, "other": 0})
+        exported = self.client.get("/api/reports/export", headers=self.headers(1))
+        book = openpyxl.load_workbook(BytesIO(exported.content))
+        rows = list(book["医院网络部统计"].values)
+        self.assertEqual(rows[1][rows[0].index("IT设备")], 1)
+        self.assertEqual(rows[2][rows[0].index("手机设备")], 20)
+        rows = list(book["部门统计"].values)
+        self.assertEqual(sum(row[rows[0].index("IT设备")] for row in rows[1:]), 2)
+        rows = list(book["报废分类统计"].values)
+        self.assertEqual((rows[1][1], rows[1][2], rows[2][1], rows[2][2]), (1, 1, 27, 18))
+        self.assertEqual(
+            len(list(book["IT设备"].values)) - 1, 49
+        )  # Historical detail remains exportable.
+
     def test_hospital_network_report_groups_quantities_scope_and_export(self):
         from models import FireAsset, PhoneAsset, PhoneNumber
 

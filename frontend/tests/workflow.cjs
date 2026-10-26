@@ -102,7 +102,19 @@ async function main() {
               },
             }
           if (url === '/assets/phone')
-            return { data: [{ quantity: 20, department: '甲部门', status: 'idle' }] }
+            return {
+              data: [
+                { quantity: 20, department: '甲部门', status: 'idle' },
+                { quantity: 8, department: '甲部门', status: 'scrapped' },
+              ],
+            }
+          if (url === '/assets/it')
+            return {
+              data: [
+                { asset_number: 'IT-1', department: '甲部门', status: 'idle' },
+                { asset_number: 'IT-OLD', department: '甲部门', status: 'scrapped' },
+              ],
+            }
           return { data: [{ asset_number: 'IT-1', department: '甲部门', status: 'idle' }] }
         },
       },
