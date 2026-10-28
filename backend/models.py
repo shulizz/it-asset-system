@@ -2,7 +2,9 @@ import secrets
 from datetime import datetime
 
 from database import Base
-from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from department_policy import initial_medical_access, initial_report_group
+from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String, Text, event
+from sqlalchemy.orm import Session
 
 
 class AssetSequence(Base):
@@ -18,6 +20,8 @@ class Department(Base):
     name = Column(String(50), unique=True, nullable=False)
     manager = Column(String(50))
     note = Column(String(200))
+    report_group = Column(String(20), default=initial_report_group)
+    medical_access = Column(Integer, default=initial_medical_access)
 
 
 # ===== 自定义角色 =====
@@ -52,6 +56,7 @@ class User(Base):
 
 # ===== IT设备 =====
 class ITAsset(Base):
+    revision = Column(Integer, nullable=False, default=0, server_default="0")
     __tablename__ = "it_assets"
     id = Column(Integer, primary_key=True, index=True)
     asset_number = Column(String(50), unique=True, index=True, nullable=False)
@@ -88,6 +93,7 @@ class PhoneAsset(Base):
 
 # ===== 医疗设备 =====
 class MedicalAsset(Base):
+    revision = Column(Integer, nullable=False, default=0, server_default="0")
     __tablename__ = "medical_assets"
     id = Column(Integer, primary_key=True, index=True)
     asset_number = Column(String(50), unique=True, index=True, nullable=False)
@@ -108,6 +114,7 @@ class MedicalAsset(Base):
 
 # ===== 消防设备 =====
 class FireAsset(Base):
+    revision = Column(Integer, nullable=False, default=0, server_default="0")
     __tablename__ = "fire_assets"
     id = Column(Integer, primary_key=True, index=True)
     asset_number = Column(String(50), unique=True, index=True, nullable=False)
@@ -124,6 +131,7 @@ class FireAsset(Base):
 
 # ===== 电话号码 =====
 class PhoneNumber(Base):
+    revision = Column(Integer, nullable=False, default=0, server_default="0")
     __tablename__ = "phone_numbers"
     id = Column(Integer, primary_key=True, index=True)
     number = Column(String(20), unique=True, index=True, nullable=False)
@@ -224,6 +232,7 @@ class OperationLog(Base):
 
 # ===== 微信账号 =====
 class WeChatAccount(Base):
+    revision = Column(Integer, nullable=False, default=0, server_default="0")
     __tablename__ = "wechat_accounts"
     id = Column(Integer, primary_key=True, index=True)
     wx_account = Column(String(100), unique=True, index=True, nullable=False)
@@ -233,3 +242,14 @@ class WeChatAccount(Base):
     purpose = Column(String(200))
     status = Column(String(20), default="in_use")
     notes = Column(Text)
+
+
+@event.listens_for(Session, "before_flush")
+def advance_asset_revisions(session, flush_context, instances):
+    """Cover edits, imports and workflow transitions through one mutation boundary."""
+    for item in session.dirty:
+        if isinstance(
+            item, (ITAsset, PhoneAsset, MedicalAsset, FireAsset, PhoneNumber, WeChatAccount)
+        ):
+            if session.is_modified(item, include_collections=False):
+                item.revision = (item.revision or 0) + 1

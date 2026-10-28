@@ -26,8 +26,8 @@ def validate_quantity(asset, quantity):
 
 
 def check_source_revision(asset, revision):
-    if isinstance(asset, PhoneAsset) and revision is not None and asset.revision != revision:
-        raise HTTPException(409, "申请后手机数量或归属已变更，请驳回旧申请并重新提交")
+    if hasattr(asset, "revision") and (revision is None or asset.revision != revision):
+        raise HTTPException(409, "资产已变更或旧申请缺少版本信息，请驳回旧申请并重新提交")
 
 
 def validate_transition(db, asset, action, user, recipient=None, target_id=None, quantity=1):
@@ -62,8 +62,6 @@ def apply_transition(
 ):
     validate_quantity(asset, quantity)
     source = asset
-    if isinstance(asset, PhoneAsset):
-        asset.revision += 1
     # Keep the unprocessed remainder at its original owner/status; split only at execution.
     if isinstance(asset, PhoneAsset) and quantity < asset.quantity:
         asset.quantity -= quantity

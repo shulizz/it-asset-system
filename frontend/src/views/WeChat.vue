@@ -44,7 +44,7 @@
                 style="color: #ef4444"
                 @click="remove(item)"
               >
-                删除
+                申请删除
               </button>
             </td>
           </tr>
@@ -140,9 +140,19 @@ async function save() {
   }
 }
 async function remove(item) {
-  if (!confirm('确定删除 ' + item.wx_account + '?')) return
-  await api.delete('/wechat/' + item.id)
-  load()
+  const reason = prompt('请输入申请删除 ' + item.wx_account + ' 的原因（审批通过后移出档案）')
+  if (!reason?.trim()) return
+  try {
+    await api.post('/delete-request', {
+      table_name: 'wechat_accounts',
+      record_id: item.id,
+      record_desc: '微信账号 ' + item.wx_account,
+      reason: reason.trim(),
+    })
+    alert('删除申请已提交，请等待另一位审批人处理')
+  } catch (e) {
+    alert(e.response?.data?.detail || '提交失败，请稍后重试')
+  }
 }
 onMounted(load)
 </script>

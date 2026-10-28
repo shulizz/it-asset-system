@@ -1,5 +1,6 @@
 """Idempotent additive migrations; ambiguous names never establish ownership."""
 
+from department_policy import HOSPITAL_DEPARTMENTS, MEDICAL_DEPARTMENTS
 from sqlalchemy import text
 
 
@@ -7,6 +8,7 @@ def migrate_schema(engine):
     """Single startup entry: additive columns and legacy identity repairs."""
     with engine.begin() as conn:
         id_columns = {
+            "departments": ["report_group VARCHAR(20)", "medical_access INTEGER"],
             "users": [
                 "role_id INTEGER",
                 "department_id INTEGER",
@@ -29,11 +31,18 @@ def migrate_schema(engine):
             "fire_assets": ["location VARCHAR(200)"],
         }
         for table, columns in id_columns.items():
+            if table in {"it_assets", "medical_assets", "fire_assets", "phone_numbers"}:
+                columns = [*columns, "revision INTEGER NOT NULL DEFAULT 0"]
             existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
             for column in columns:
                 column_name = column.split()[0]
                 if column_name not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column}"))
+        existing = {row[1] for row in conn.execute(text("PRAGMA table_info(wechat_accounts)"))}
+        if "revision" not in existing:
+            conn.execute(
+                text("ALTER TABLE wechat_accounts ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
+            )
         for table in ["users", "it_assets", "phone_assets", "medical_assets", "phone_numbers"]:
             # Empty legacy labels are already excluded below; preserve their exact values.
             conn.execute(
@@ -51,6 +60,22 @@ def migrate_schema(engine):
                 "UPDATE users SET data_scope=CASE WHEN role IN ('super_admin','asset_admin') THEN 'all' ELSE 'department' END WHERE data_scope IS NULL"
             )
         )
+        for row in conn.execute(text("SELECT id, name FROM departments")).all():
+            conn.execute(
+                text(
+                    "UPDATE departments SET report_group=:group WHERE id=:id AND report_group IS NULL"
+                ),
+                {
+                    "id": row.id,
+                    "group": "hospital" if row.name in HOSPITAL_DEPARTMENTS else "network",
+                },
+            )
+            conn.execute(
+                text(
+                    "UPDATE departments SET medical_access=:access WHERE id=:id AND medical_access IS NULL"
+                ),
+                {"id": row.id, "access": int(row.name in MEDICAL_DEPARTMENTS)},
+            )
     migrate_workflow(engine)
 
 

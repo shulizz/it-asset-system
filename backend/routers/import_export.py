@@ -229,6 +229,8 @@ def export_excel(
         if hasattr(model, "department")
         else db.query(model)
     )
+    if module == "wechat":
+        query = query.filter(model.status != "archived")
 
     with export_workbook() as wb:
         ws = wb.create_sheet(cfg["label"])

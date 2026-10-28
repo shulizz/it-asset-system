@@ -143,6 +143,33 @@ async function main() {
   assert.equal(report.state.total.value.wechat, '无权限')
   assert.equal(calls.includes('/wechat'), false)
   assert.equal(report.state.canExport.value, true)
+  const statusReport = component(
+    'views/Reports.vue',
+    {
+      api: {
+        get: async (url) => {
+          if (url === '/auth/me')
+            return { data: { permissions: ['reports', 'wechat_read'], data_scope: 'all' } }
+          if (url === '/reports/group-summary')
+            return { data: { modules: [], unassigned: {}, groups: [] } }
+          if (url === '/assets/numbers')
+            return { data: [{ number: 'synthetic', status: 'in_use' }] }
+          if (url === '/wechat') return { data: [{ wx_account: 'synthetic', status: 'idle' }] }
+          if (url === '/assets/phone') return { data: [{ quantity: 5, status: 'idle' }] }
+          return { data: [] }
+        },
+      },
+    },
+    ['status', 'idleList'],
+  )
+  await statusReport.mounted[0]()
+  assert.equal(statusReport.state.status.value.inUse, 1, 'Status cards include phone numbers')
+  assert.equal(
+    statusReport.state.status.value.idle,
+    6,
+    'Status cards include WeChat and weighted phones',
+  )
+  assert.equal(statusReport.state.idleList.value.length, 2)
   assert.match(
     fs.readFileSync(path.join(root, 'views/Reports.vue'), 'utf8'),
     /endpoint="\/reports\/export"/,

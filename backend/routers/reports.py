@@ -42,6 +42,8 @@ def export_report(db: Session = Depends(get_db), user=Depends(require_perm("repo
                 if hasattr(model, "department_id")
                 else db.query(model)
             )
+            if module == "wechat":
+                query = query.filter(model.status != "archived")
             fields = [field for field in cfg["fields"] if field[1] != "wx_password"]
             rows = query.with_entities(*(getattr(model, field[1]) for field in fields)).yield_per(
                 500
@@ -83,7 +85,14 @@ def export_report(db: Session = Depends(get_db), user=Depends(require_perm("repo
         append_text_row(
             ws, ["未分配部门（未计入两组）"] + [summary["unassigned"][key] for key in keys]
         )
-        append_text_row(ws, ["医院范围：护理部、医院、门诊、办公室；网络部范围：其余部门。"])
+        append_text_row(
+            ws,
+            [
+                "医院范围："
+                + "、".join(summary["hospital_departments"])
+                + "；网络部范围：其余部门。"
+            ],
+        )
         append_text_row(ws, ["合计不含已报废及已移出档案设备；报废数量单独统计；手机按实际台数。"])
         if summary["wechat_count"] is not None:
             append_text_row(

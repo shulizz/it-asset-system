@@ -1,17 +1,13 @@
 from datetime import date
 from typing import Literal, Optional
 
+from asset_registry import WORKFLOW_MODELS
 from database import get_db, get_write_db
 from deps import require_perm, scope_query
 from fastapi import APIRouter, Depends, HTTPException
 from models import (
     Department,
-    FireAsset,
-    ITAsset,
-    MedicalAsset,
     OperationLog,
-    PhoneAsset,
-    PhoneNumber,
     TransferRecord,
     User,
 )
@@ -20,13 +16,7 @@ from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/transfer", tags=["transfer"])
 
-MODEL_MAP = {
-    "fire": FireAsset,
-    "it": ITAsset,
-    "phone": PhoneAsset,
-    "medical": MedicalAsset,
-    "number": PhoneNumber,
-}
+MODEL_MAP = WORKFLOW_MODELS
 
 
 class TransferIn(BaseModel):

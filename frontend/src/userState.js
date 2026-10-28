@@ -12,14 +12,27 @@ function savedUser() {
 export const currentUser = ref(savedUser())
 let generation = 0
 let activeRequest = null
+let sessionGeneration = 0
+let sessionToken = localStorage.getItem('token')
+
+export function captureSession() {
+  const started = sessionGeneration
+  const token = localStorage.getItem('token')
+  return () => sessionGeneration === started && localStorage.getItem('token') === token
+}
 
 export function setCurrentUser(user) {
+  const token = localStorage.getItem('token')
+  if (user.id !== currentUser.value.id || token !== sessionToken) sessionGeneration++
+  sessionToken = token
   generation++
   currentUser.value = user
   localStorage.setItem('user', JSON.stringify(user))
 }
 
 export function clearSession() {
+  sessionGeneration++
+  sessionToken = null
   generation++
   currentUser.value = {}
   localStorage.removeItem('token')

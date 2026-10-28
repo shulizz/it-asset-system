@@ -7,7 +7,7 @@
     "build": "vite build",
     "electron:dev": "electron .",
     "electron:build": "vite build && electron-builder",
-    "test": "node tests/workflow.cjs && node tests/performance.cjs && node tests/permissions.cjs",
+    "test": "node tests/workflow.cjs && node tests/performance.cjs && node tests/permissions.cjs && node tests/password-session.cjs",
     "format": "prettier --write src tests electron vite.config.js package.json",
     "format:check": "prettier --check src tests electron vite.config.js package.json"
   },

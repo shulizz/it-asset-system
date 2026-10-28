@@ -5,7 +5,14 @@ from datetime import datetime, timedelta
 from typing import Literal, Optional
 
 from database import get_db, get_write_db
-from deps import ALGORITHM, SECRET_KEY, get_current_user, get_user_permissions, require_super_admin
+from deps import (
+    ALGORITHM,
+    SECRET_KEY,
+    can_view_medical,
+    get_current_user,
+    get_user_permissions,
+    require_super_admin,
+)
 from fastapi import APIRouter, Depends, HTTPException, Request
 from jose import jwt
 from login_limits import login_limiter, password_limiter
@@ -87,6 +94,7 @@ def user_view(user, db):
         "role_id": user.role_id,
         "department": user.department,
         "department_id": user.department_id,
+        "medical_access": can_view_medical(user),
         "is_active": user.is_active,
         "data_scope": user.data_scope or "department",
         "permissions": get_user_permissions(user, db),

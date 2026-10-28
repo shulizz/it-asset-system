@@ -26,8 +26,22 @@ async function main() {
   )
   assert.equal(hasMedicalAccess({ role: 'super_admin' }), true)
   assert.equal(hasMedicalAccess({ role: '管理员', department: '商务通', department_id: 1 }), false)
-  assert.equal(hasMedicalAccess({ department: '护理部', department_id: 2 }), true)
-  assert.equal(hasMedicalAccess({ department: '医院', department_id: 3 }), true)
+  assert.equal(
+    hasMedicalAccess({ department: '护理部', department_id: 2, medical_access: true }),
+    true,
+  )
+  assert.equal(
+    hasMedicalAccess({ department: '医院', department_id: 3, medical_access: true }),
+    true,
+  )
+  assert.equal(
+    hasMedicalAccess({ department: '改名后的医院', department_id: 3, medical_access: true }),
+    true,
+  )
+  assert.equal(
+    hasMedicalAccess({ department: '医院', department_id: 3, medical_access: false }),
+    false,
+  )
   assert.equal(hasMedicalAccess({ department: '医院' }), false)
   const storage = new Map([['token', 'first-session']])
   const localStorage = {

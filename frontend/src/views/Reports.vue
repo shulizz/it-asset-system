@@ -38,7 +38,9 @@
               <h4>{{ group.name }}</h4>
               <p>
                 {{
-                  group.key === 'hospital' ? '护理部、医院、门诊、办公室' : '除医院范围外的其余部门'
+                  group.key === 'hospital'
+                    ? groupSummary.hospital_departments.join('、')
+                    : '除医院范围外的其余部门'
                 }}
               </p>
             </header>
@@ -125,6 +127,9 @@
         <div class="label">微信账号</div>
       </div>
     </div>
+    <p class="group-note">
+      状态统计包含可查看的设备、电话号码和微信账号；手机按台数，注销及停用不计入在用、闲置。
+    </p>
     <div class="stats" style="margin-top: 16px">
       <div class="card">
         <div class="num" style="color: #16a34a">{{ status.inUse }}</div>
@@ -185,8 +190,8 @@
           </thead>
           <tbody>
             <tr v-for="item in idleList" :key="item.key">
-              <td>{{ item.asset_number || item.number }}</td>
-              <td>{{ item.name || item.brand_model }}</td>
+              <td>{{ item.asset_number || item.number || item.wx_account }}</td>
+              <td>{{ item.name || item.brand_model || item.wx_account || item.carrier || '—' }}</td>
               <td>{{ assetQuantity(item) }}</td>
               <td>{{ item.type }}</td>
             </tr>
@@ -301,6 +306,8 @@ onMounted(async () => {
     ...it.data.map((x) => ({ ...x, type: 'IT设备' })),
     ...phone.data.map((x) => ({ ...x, type: '手机' })),
     ...medical.data.map((x) => ({ ...x, type: '医疗' })),
+    ...numbers.data.map((x) => ({ ...x, type: '电话号码' })),
+    ...wc.data.filter((x) => x.wx_account).map((x) => ({ ...x, type: '微信账号' })),
   ]
   status.value.inUse = totalQuantity(all.filter((x) => x.status === 'in_use'))
   status.value.idle = totalQuantity(all.filter((x) => x.status === 'idle'))

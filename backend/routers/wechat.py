@@ -74,7 +74,10 @@ class WeChatIn(BaseModel):
 def list(db: Session = Depends(get_db), current_user=Depends(wechat_access)):
     return [
         account_view(item, current_user, db)
-        for item in db.query(WeChatAccount).order_by(WeChatAccount.id.desc()).all()
+        for item in db.query(WeChatAccount)
+        .filter(WeChatAccount.status != "archived")
+        .order_by(WeChatAccount.id.desc())
+        .all()
     ]
 
 
@@ -116,6 +119,8 @@ def update(
     item = db.get(WeChatAccount, item_id)
     if not item:
         raise HTTPException(404, "不存在")
+    if item.status == "archived":
+        raise HTTPException(409, "账号已移出档案，不能编辑")
     if (
         db.query(WeChatAccount)
         .filter(WeChatAccount.wx_account == data.wx_account, WeChatAccount.id != item_id)
@@ -123,7 +128,10 @@ def update(
     ):
         raise HTTPException(409, "微信账号已存在")
     values = data.model_dump(exclude_unset=True)
-    values["status"] = "in_use" if values.get("user_name", item.user_name) else "idle"
+    if "status" in values and values["status"] not in ("in_use", "idle", "stopped"):
+        raise HTTPException(400, "账号状态无效")
+    if "status" not in values and "user_name" in values:
+        values["status"] = "in_use" if values["user_name"] else "idle"
     for k, v in values.items():
         if k == "wx_password" and v is None:
             continue
@@ -150,14 +158,15 @@ def delete(
     item = db.get(WeChatAccount, item_id)
     if not item:
         raise HTTPException(404, "不存在")
-    db.add(
-        OperationLog(
-            user=current_user.name,
-            module="微信账号",
-            action="删除",
-            detail=f"删除微信账号 {item.wx_account}",
-        )
+    from routers.delete_req import DeleteReqIn, create_request
+
+    return create_request(
+        DeleteReqIn(
+            table_name="wechat_accounts",
+            record_id=item_id,
+            record_desc=f"微信账号 {item.wx_account}",
+            reason="申请移出微信账号档案",
+        ),
+        db,
+        current_user,
     )
-    db.delete(item)
-    db.commit()
-    return {"ok": True}

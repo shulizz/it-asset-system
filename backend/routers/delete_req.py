@@ -2,6 +2,7 @@ from datetime import date, datetime
 from typing import Literal, Optional
 from uuid import uuid4
 
+from asset_registry import ASSET_MODELS, ASSET_TABLES, TABLE_ASSET_TYPES
 from database import get_db, get_write_db
 from deps import (
     can_view_fire,
@@ -16,12 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import (
     DeleteRequest,
     Department,
-    FireAsset,
-    ITAsset,
-    MedicalAsset,
     OperationLog,
-    PhoneAsset,
-    PhoneNumber,
     ScrapRequest,
     TransferRecord,
     User,
@@ -32,15 +28,11 @@ from workflow import apply_transition, check_source_revision, validate_transitio
 
 router = APIRouter(prefix="/api/delete-request", tags=["delete-request"])
 TABLE_MAP = {
-    "fire_assets": FireAsset,
-    "it_assets": ITAsset,
-    "phone_assets": PhoneAsset,
-    "medical_assets": MedicalAsset,
-    "phone_numbers": PhoneNumber,
+    **ASSET_TABLES,
     "scrap_requests": ScrapRequest,
     "transfer_records": TransferRecord,
 }
-ASSET_MAP = {"fire": FireAsset, "it": ITAsset, "phone": PhoneAsset, "medical": MedicalAsset}
+ASSET_MAP = ASSET_MODELS
 
 
 def request_in_scope(item, user, db):
@@ -58,6 +50,17 @@ def pending_request(item_id, db, user):
     if not item:
         raise HTTPException(404, "申请不存在")
     check_medical_record(item, user)
+    if item.table_name != "apply_requests":
+        model = TABLE_MAP.get(item.table_name)
+        source = db.get(model, item.record_id) if model else None
+        if source:
+            check_medical_record(source, user)
+        elif (
+            item.table_name in ("scrap_requests", "transfer_records")
+            and not item.asset_type
+            and user.role != "super_admin"
+        ):
+            raise HTTPException(403, "历史申请来源无法确认，需超级管理员处理")
     if not request_in_scope(item, user, db):
         raise HTTPException(403, "只能审批本部门申请")
     if item.status != "pending":
@@ -151,7 +154,13 @@ def create_request(
     else:
         if data.table_name not in TABLE_MAP:
             raise HTTPException(400, "不允许申请删除该类型记录")
-        if "assets_write" not in get_user_permissions(current_user, db) and not (
+        permissions = get_user_permissions(current_user, db)
+        if data.table_name == "wechat_accounts":
+            if "wechat" not in permissions or (
+                current_user.role != "super_admin" and current_user.data_scope != "all"
+            ):
+                raise HTTPException(403, "没有微信账号删除申请权限")
+        elif "assets_write" not in permissions and not (
             data.table_name == "fire_assets" and can_view_fire(current_user)
         ):
             raise HTTPException(403, "没有申请删除权限")
@@ -170,13 +179,15 @@ def create_request(
             "asset_id",
         ):
             values[field] = None
-    if getattr(record, "asset_type", None) == "fire" and data.table_name != "apply_requests":
-        values["asset_type"] = "fire"
+    if data.table_name != "apply_requests":
+        values["asset_type"] = TABLE_ASSET_TYPES.get(
+            data.table_name, getattr(record, "asset_type", None)
+        )
     values.update(
         source_revision=getattr(record, "revision", None),
         applicant=current_user.name,
         applicant_id=current_user.id,
-        department_id=record.department_id,
+        department_id=getattr(record, "department_id", None),
     )
     item = DeleteRequest(**values)
     db.add(item)
@@ -250,13 +261,7 @@ def approve_request(
             raise HTTPException(404, "申请对应的记录已不存在")
         check_scope(record, current_user)
         check_source_revision(record, item.source_revision)
-        if item.table_name in (
-            "it_assets",
-            "phone_assets",
-            "medical_assets",
-            "phone_numbers",
-            "fire_assets",
-        ):
+        if item.table_name in ASSET_TABLES:
             record.status = "archived"  # preserve stable asset identity and audit history
         else:
             db.delete(record)

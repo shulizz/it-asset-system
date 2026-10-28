@@ -80,7 +80,7 @@ import { useRouter } from 'vue-router'
 import PageHeading from '../components/PageHeading.vue'
 import AppIcon from '../components/AppIcon.vue'
 import api from '../api'
-import { currentUser, clearSession } from '../userState'
+import { currentUser, clearSession, captureSession } from '../userState'
 const router = useRouter()
 const currentPassword = ref(''),
   newPassword = ref(''),
@@ -94,7 +94,11 @@ function clearPasswords() {
   newPassword.value = ''
   confirmPassword.value = ''
 }
-onBeforeUnmount(clearPasswords)
+let mounted = true
+onBeforeUnmount(() => {
+  mounted = false
+  clearPasswords()
+})
 function back() {
   verified.value = false
   clearPasswords()
@@ -117,22 +121,25 @@ function showError(e) {
 }
 async function verify() {
   if (busy.value) return
+  const sameSession = captureSession()
   error.value = ''
   busy.value = true
   try {
     await api.post('/auth/password/verify', { current_password: currentPassword.value })
+    if (!mounted || !sameSession()) return
     verified.value = true
     busy.value = false
     await nextTick()
     newPasswordInput.value?.focus()
   } catch (e) {
-    showError(e)
+    if (mounted && sameSession()) showError(e)
   } finally {
     busy.value = false
   }
 }
 async function save() {
   if (busy.value) return
+  const sameSession = captureSession()
   error.value = ''
   if (newPassword.value !== confirmPassword.value) {
     error.value = '两次填写的新密码不一致'
@@ -156,11 +163,12 @@ async function save() {
       new_password: newPassword.value,
       confirm_password: confirmPassword.value,
     })
+    if (!mounted || !sameSession()) return
     clearPasswords()
     clearSession()
     await router.replace({ path: '/login', query: { passwordChanged: '1' } })
   } catch (e) {
-    showError(e)
+    if (mounted && sameSession()) showError(e)
   } finally {
     busy.value = false
   }

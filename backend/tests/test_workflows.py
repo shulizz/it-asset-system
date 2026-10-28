@@ -34,6 +34,7 @@ from models import (
     MedicalAsset,
     OperationLog,
     Role,
+    ScrapRequest,
     TransferRecord,
     User,
     WeChatAccount,
@@ -43,6 +44,206 @@ from sqlalchemy import create_engine, text
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_department_rename_preserves_medical_access_and_report_group(self):
+        self.use_medical_departments()
+        with SessionLocal() as db:
+            db.add(
+                ITAsset(
+                    asset_number="RENAME-HOSP",
+                    name="主机",
+                    status="in_use",
+                    department_id=1,
+                    department="护理部",
+                )
+            )
+            db.commit()
+        result = self.client.put(
+            "/api/departments/1", headers=self.headers(1), json={"name": "护理中心"}
+        )
+        self.assertEqual(result.status_code, 200, result.text)
+        identity = self.client.get("/api/auth/me", headers=self.headers(2)).json()
+        self.assertTrue(identity["medical_access"])
+        self.assertEqual(identity["department"], "护理中心")
+        self.assertEqual(
+            self.client.get("/api/assets/medical", headers=self.headers(2)).status_code, 200
+        )
+        summary = self.client.get("/api/reports/group-summary", headers=self.headers(1)).json()
+        self.assertEqual(summary["groups"][0]["counts"]["it"], 1)
+        self.assertIn("护理中心", summary["hospital_departments"])
+
+    def test_all_asset_edits_invalidate_pending_delete_approval(self):
+        from models import FireAsset, PhoneAsset, PhoneNumber
+
+        examples = [
+            (ITAsset, {"asset_number": "REV-IT", "name": "主机"}),
+            (PhoneAsset, {"asset_number": "REV-PH", "brand_model": "手机"}),
+            (MedicalAsset, {"asset_number": "REV-MED", "name": "医疗"}),
+            (FireAsset, {"asset_number": "REV-FIRE", "name": "灭火器"}),
+            (PhoneNumber, {"number": "13800000002"}),
+        ]
+        with SessionLocal() as db:
+            db.get(User, 4).data_scope = "all"
+            db.get(User, 4).role = "super_admin"
+            db.commit()
+        for model, values in examples:
+            with SessionLocal() as db:
+                item = model(**values, department="甲部门", department_id=1, status="in_use")
+                db.add(item)
+                db.commit()
+                identity = item.id
+            requested = self.client.post(
+                "/api/delete-request",
+                headers=self.headers(1),
+                json={
+                    "table_name": model.__tablename__,
+                    "record_id": identity,
+                    "record_desc": "test",
+                    "reason": "test",
+                },
+            )
+            self.assertEqual(requested.status_code, 200, requested.text)
+            with SessionLocal() as db:
+                db.get(model, identity).notes = "申请后修改"
+                db.commit()
+            response = self.client.put(
+                f"/api/delete-request/{requested.json()['id']}/approve", headers=self.headers(4)
+            )
+            self.assertEqual(response.status_code, 409, response.text)
+            with SessionLocal() as db:
+                self.assertEqual(db.get(model, identity).status, "in_use")
+
+    def test_notes_edit_preserves_in_use_without_named_person(self):
+        identity = self.asset(status="in_use")
+        response = self.client.put(
+            f"/api/assets/it/{identity}",
+            headers=self.headers(3),
+            json={"name": "测试设备", "notes": "仅修改备注"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "in_use")
+
+    def test_scrapped_number_cannot_be_restored_by_edit(self):
+        from models import PhoneNumber
+
+        with SessionLocal() as db:
+            db.add(
+                PhoneNumber(
+                    id=1,
+                    number="13800000001",
+                    department_id=1,
+                    department="甲部门",
+                    status="scrapped",
+                )
+            )
+            db.commit()
+        response = self.client.put(
+            "/api/assets/numbers/1",
+            headers=self.headers(3),
+            json={"number": "13800000001", "notes": "备注"},
+        )
+        self.assertEqual(response.status_code, 400, response.text)
+        with SessionLocal() as db:
+            self.assertEqual(db.get(PhoneNumber, 1).status, "scrapped")
+
+    def test_it_scrap_rejects_stale_owner_and_legacy_missing_revision(self):
+        for legacy in (False, True):
+            identity = self.asset(status="in_use", number=f"STALE-{legacy}")
+            request = self.client.post(
+                "/api/scrap",
+                headers=self.headers(2),
+                json={"asset_type": "it", "asset_id": identity, "asset_desc": "test"},
+            )
+            self.assertEqual(request.status_code, 200, request.text)
+            if legacy:
+                with SessionLocal() as db:
+                    db.get(ScrapRequest, request.json()["id"]).source_revision = None
+                    db.commit()
+            else:
+                edited = self.client.put(
+                    f"/api/assets/it/{identity}",
+                    headers=self.headers(3),
+                    json={"name": "测试设备", "user_name": "新使用人"},
+                )
+                self.assertEqual(edited.status_code, 200, edited.text)
+            approved = self.client.put(
+                f"/api/scrap/{request.json()['id']}/approve", headers=self.headers(3)
+            )
+            self.assertEqual(approved.status_code, 409, approved.text)
+            with SessionLocal() as db:
+                self.assertEqual(db.get(ITAsset, identity).status, "in_use")
+
+    def test_medical_history_delete_is_hidden_and_cannot_be_rejected(self):
+        with SessionLocal() as db:
+            db.get(User, 3).data_scope = "all"
+            db.add(
+                TransferRecord(
+                    id=1,
+                    transfer_number="MED-TR",
+                    type="checkout",
+                    asset_desc="medical confidential",
+                    asset_type="medical",
+                    department_id=2,
+                )
+            )
+            db.add(
+                ScrapRequest(
+                    id=1,
+                    request_number="MED-SC",
+                    asset_desc="medical confidential",
+                    asset_type="medical",
+                    department_id=2,
+                )
+            )
+            db.commit()
+        for table in ("transfer_records", "scrap_requests"):
+            response = self.client.post(
+                "/api/delete-request",
+                headers=self.headers(1),
+                json={
+                    "table_name": table,
+                    "record_id": 1,
+                    "record_desc": "medical confidential",
+                    "reason": "test",
+                },
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["asset_type"], "medical")
+            identity = response.json()["id"]
+            # Old requests with missing type must also remain protected.
+            with SessionLocal() as db:
+                db.get(DeleteRequest, identity).asset_type = None
+                db.commit()
+            listing = self.client.get("/api/delete-request", headers=self.headers(3))
+            self.assertNotIn("medical confidential", listing.text)
+            for action in ("reject", "approve"):
+                result = self.client.put(
+                    f"/api/delete-request/{identity}/{action}", headers=self.headers(3)
+                )
+                self.assertEqual(result.status_code, 403, result.text)
+
+    def test_wechat_deletion_requires_independent_approval_and_retains_archive(self):
+        with SessionLocal() as db:
+            user = db.get(User, 3)
+            user.permissions = json.dumps(["wechat", "approval"])
+            user.data_scope = "all"
+            db.add(WeChatAccount(id=1, wx_account="synthetic-delete", status="idle"))
+            db.commit()
+        request = self.client.delete("/api/wechat/1", headers=self.headers(3))
+        self.assertEqual(request.status_code, 200, request.text)
+        with SessionLocal() as db:
+            self.assertIsNotNone(db.get(WeChatAccount, 1))
+            pending = db.query(DeleteRequest).filter_by(table_name="wechat_accounts").one()
+            identity = pending.id
+        own = self.client.put(f"/api/delete-request/{identity}/approve", headers=self.headers(3))
+        self.assertEqual(own.status_code, 400, own.text)
+        approved = self.client.put(
+            f"/api/delete-request/{identity}/approve", headers=self.headers(1)
+        )
+        self.assertEqual(approved.status_code, 200, approved.text)
+        with SessionLocal() as db:
+            self.assertEqual(db.get(WeChatAccount, 1).status, "archived")
+        self.assertEqual(self.client.get("/api/wechat", headers=self.headers(3)).json(), [])
+
     def test_delegated_fire_manager_has_only_fire_access(self):
         with SessionLocal() as db:
             user = db.get(User, 3)
@@ -1327,6 +1528,8 @@ class WorkflowTests(unittest.TestCase):
         with SessionLocal() as db:
             for department_id, name in [(1, "护理部"), (2, "医院")]:
                 db.get(Department, department_id).name = name
+                db.get(Department, department_id).medical_access = 1
+                db.get(Department, department_id).report_group = "hospital"
                 db.query(User).filter(User.department_id == department_id).update(
                     {User.department: name}
                 )

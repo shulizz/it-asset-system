@@ -73,23 +73,21 @@ def update_asset_fields(db, item, data, user, user_field):
             .first()
         ):
             raise HTTPException(409, "编号或号码已存在")
-    final_user = values.get(user_field, getattr(item, user_field))
-    requested_status = values.get("status", item.status)
-    values["status"] = (
-        requested_status
-        if isinstance(item, FireAsset)
-        else (
-            requested_status
-            if isinstance(item, PhoneNumber) and requested_status in ("cancelled", "unused")
-            else ("in_use" if final_user else "idle")
-        )
-    )
+    if item.status in ("scrapped", "archived"):
+        raise HTTPException(400, "已报废或移出档案的记录不能直接编辑")
+    if "status" in values:
+        allowed = {"in_use", "idle"}
+        if isinstance(item, PhoneNumber):
+            allowed |= {"cancelled", "unused"}
+        if values["status"] not in allowed:
+            raise HTTPException(400, "状态无效，报废和移出档案需要审批")
+    elif user_field in values and values[user_field] != getattr(item, user_field):
+        if not isinstance(item, FireAsset) and item.status not in ("cancelled", "unused"):
+            values["status"] = "in_use" if values[user_field] else "idle"
     for key, value in values.items():
         setattr(item, key, value)
     sync_department_id(db, item)
     check_scope(item, user)
-    if isinstance(item, PhoneAsset):
-        item.revision += 1
 
 
 @router.get("/it")

@@ -2,6 +2,7 @@ from datetime import date
 from typing import Optional
 from uuid import uuid4
 
+from asset_registry import WORKFLOW_MODELS
 from database import get_db, get_write_db
 from deps import (
     check_scope,
@@ -13,12 +14,7 @@ from deps import (
 )
 from fastapi import APIRouter, Depends, HTTPException
 from models import (
-    FireAsset,
-    ITAsset,
-    MedicalAsset,
     OperationLog,
-    PhoneAsset,
-    PhoneNumber,
     ScrapRequest,
     User,
 )
@@ -28,13 +24,7 @@ from workflow import apply_transition, check_source_revision, validate_transitio
 
 router = APIRouter(prefix="/api/scrap", tags=["scrap"])
 
-ASSET_MAP = {
-    "fire": FireAsset,
-    "it": ITAsset,
-    "phone": PhoneAsset,
-    "medical": MedicalAsset,
-    "number": PhoneNumber,
-}
+ASSET_MAP = WORKFLOW_MODELS
 
 
 class ScrapIn(BaseModel):

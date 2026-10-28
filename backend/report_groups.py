@@ -1,10 +1,9 @@
 """Hospital/network report totals share the same scope and module access as exports."""
 
+from department_policy import HOSPITAL_DEPARTMENTS
 from deps import can_view_fire, can_view_medical, get_user_permissions, scope_query
 from models import Department
 from sqlalchemy import func
-
-HOSPITAL_DEPARTMENTS = {"护理部", "医院", "门诊", "办公室"}
 
 
 def it_scrap_category(name, category):
@@ -39,7 +38,7 @@ def group_summary(db, user, module_config):
         model = module_config[module]["model"]
         department = func.coalesce(Department.name, model.department)
         quantity = func.sum(model.quantity) if module == "phone" else func.count(model.id)
-        dimensions = [department, model.status]
+        dimensions = [department, model.status, Department.report_group]
         if module == "it":
             dimensions.extend([model.name, model.category])
         rows = (
@@ -50,13 +49,18 @@ def group_summary(db, user, module_config):
             .all()
         )
         for row in rows:
-            department_name, status, *details = row[:-1]
+            department_name, status, report_group, *details = row[:-1]
             count = int(row[-1] or 0)
             department_name = (department_name or "").strip()
             if not department_name:
                 target = unassigned
             else:
-                index = 0 if department_name in HOSPITAL_DEPARTMENTS else 1
+                hospital = (
+                    report_group == "hospital"
+                    if report_group
+                    else department_name in HOSPITAL_DEPARTMENTS
+                )
+                index = 0 if hospital else 1
                 target = groups[index]
             target["scrapped" if status == "scrapped" else "counts"][module] += count
             if status == "scrapped" and module == "it":
@@ -82,7 +86,9 @@ def group_summary(db, user, module_config):
             for key in ["hosts", "monitors", "other"]
         },
         "wechat_count": wechat_count,
-        "hospital_departments": sorted(HOSPITAL_DEPARTMENTS),
+        "hospital_departments": [
+            d.name for d in db.query(Department).filter(Department.report_group == "hospital").all()
+        ],
         "scope": "all"
         if user.role == "super_admin" or user.data_scope in {"all", "all_read_dept_write"}
         else "department",

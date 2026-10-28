@@ -5,9 +5,9 @@ from database import get_db
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from models import User
+from models import Department, ScrapRequest, TransferRecord, User
 from permissions import GLOBAL_PERMISSIONS, PERMISSION_KEYS
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 SECRET_KEY = os.getenv("IT_ASSET_SECRET_KEY")
 if not SECRET_KEY or SECRET_KEY == "it-asset-secret-key-change-in-production":
@@ -104,9 +104,11 @@ def is_fire_record(item):
 
 def can_view_medical(user):
     # Ordinary role names are display labels and must never grant administrator access.
-    return user.role == "super_admin" or bool(
-        user.department_id and user.department in {"医院", "护理部"}
-    )
+    if user.role == "super_admin":
+        return True
+    db = object_session(user)
+    department = db.get(Department, user.department_id) if db and user.department_id else None
+    return bool(department and department.medical_access)
 
 
 def require_medical_view(user):
@@ -126,6 +128,31 @@ def check_medical_record(item, user):
 
 
 def filter_medical_records(query, model, user):
+    # Older deletion requests may lack asset_type; resolve their history source in SQL.
+    if getattr(model, "__tablename__", "") == "delete_requests":
+        if user.role != "super_admin":
+            for source in (ScrapRequest, TransferRecord):
+                source_exists = (
+                    query.session.query(source.id).filter(source.id == model.record_id).exists()
+                )
+                query = query.filter(
+                    ~(
+                        (model.table_name == source.__tablename__)
+                        & model.asset_type.is_(None)
+                        & ~source_exists
+                    )
+                )
+        for kind, allowed in (("medical", can_view_medical(user)), ("fire", can_view_fire(user))):
+            if not allowed:
+                for source in (ScrapRequest, TransferRecord):
+                    sensitive_source = (
+                        query.session.query(source.id)
+                        .filter(source.id == model.record_id, source.asset_type == kind)
+                        .exists()
+                    )
+                    query = query.filter(
+                        ~((model.table_name == source.__tablename__) & sensitive_source)
+                    )
     if not can_view_fire(user):
         if getattr(model, "__tablename__", "") == "fire_assets":
             return query.filter(False)
